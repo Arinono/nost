@@ -1,0 +1,29 @@
+# fly.toml app configuration file generated for nost-whproxy on 2024-05-14T10:58:04+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'nost-whproxy'
+primary_region = 'ams'
+
+[build]
+  dockerfile = 'Dockerfile.whproxy'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = '5s'
+    timeout = '5s'
+    grace_period = '5s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1

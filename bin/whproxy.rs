@@ -58,6 +58,7 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         .route("/eventsub", post(eventsub))
+        .route("/health", get(health))
         .route("/*catchall", get(not_found))
         .layer(cors)
         .layer(error_handler)
@@ -99,6 +100,10 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
     println!("Shutting down gracefully...");
+}
+
+pub async fn health() -> &'static str {
+    "Healthy!"
 }
 
 async fn not_found() -> impl IntoResponse {
