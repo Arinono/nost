@@ -1,3 +1,6 @@
+ls:
+  just -l
+
 clean:
   cargo clean
 

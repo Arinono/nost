@@ -5,12 +5,19 @@ edition = "2021"
 
 [[bin]]
 name = "whproxy"
-path = "bin/whproxy.rs"
+path = "bin/whproxy/main.rs"
 
 [dependencies]
 anyhow = "1.0.83"
-axum = { version = "0.6.18", features = ["macros"] }
+async-trait = "0.1.80"
+axum = { version = "0.6.18", features = ["macros", "tower-log"] }
+color-eyre = { version = "0.6.3", features = ["capture-spantrace"] }
+dotenvy = "0.15.7"
+eyre = "0.6.12"
 reqwest = { version = "0.12.4", features = ["json"] }
+serde = { version = "1.0.201", features = ["derive"] }
+serde_json = "1.0.117"
+thiserror = "1.0.60"
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread", "signal"] }
 tower = { version = "0.4.13", features = ["util", "timeout"] }
 tower-http = { version = "0.4.4", features = [
@@ -19,4 +26,14 @@ tower-http = { version = "0.4.4", features = [
   "trace",
 ] }
 tracing = "0.1.37"
+tracing-error = "0.2.0"
+tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+twitch_api = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "helix", "eventsub",  "hmac"] }
+twitch_oauth2 = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "client"] }
+twitch_types = { git = "https://github.com/twitch-rs/twitch_api/" }
+
+[patch.crates-io.twitch_types]
+git = "https://github.com/twitch-rs/twitch_api"
+[patch.crates-io.twitch_oauth2]
+git = "https://github.com/twitch-rs/twitch_api"

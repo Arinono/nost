@@ -1,3 +1,10 @@
+mod env;
+// mod eventsub;
+mod tools;
+
+use env::Environment;
+use tools::install_tools;
+
 use std::{net::SocketAddr, time::Duration};
 
 use axum::{
@@ -10,12 +17,14 @@ use axum::{
 use tokio::signal;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use twitch_api::helix::{self, HelixClient};
 
 const PORT: u16 = 3000;
 
-#[derive(Debug, Clone)]
-struct AppState {}
+#[derive(Clone)]
+pub struct AppState {
+    pub env: Environment,
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -24,16 +33,29 @@ pub enum Error {
 }
 
 #[tokio::main]
-async fn main() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "nost=debug,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+async fn main() -> Result<(), eyre::Report> {
+    install_tools().expect("Failed to install tools");
 
-    let app_state = AppState {};
+    let env = Environment::new();
+
+    tracing::debug!("App starting with:\n{:#?}", env);
+
+    let client: HelixClient<reqwest::Client> = HelixClient::default();
+    let token = twitch_oauth2::AppAccessToken::get_app_access_token(
+        &client,
+        twitch_oauth2::ClientId::new(env.twitch_client_id.clone()),
+        twitch_oauth2::ClientSecret::new(env.twitch_client_secret.secret_str().to_owned()),
+        vec![],
+    )
+    .await?;
+    tracing::debug!("Token: {:#?}", token);
+
+    tracing::debug!(
+        "Channel: {:?}",
+        client.get_channel_from_login("nyrionset", &token).await?
+    );
+
+    let app_state = AppState { env };
 
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
@@ -57,7 +79,7 @@ async fn main() {
 
     // build our application with a route
     let app = Router::new()
-        .route("/eventsub", post(eventsub))
+        // .route("/eventsub", post(eventsub::eventsub))
         .route("/health", get(health))
         .route("/*catchall", get(not_found))
         .layer(cors)
@@ -65,16 +87,14 @@ async fn main() {
         .with_state(app_state);
 
     let addr: SocketAddr = format!("[::]:{}", PORT).parse().unwrap();
-    tracing::debug!("Listening on:\n{addr}");
+    tracing::info!("Listening on: {addr}");
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
-}
 
-async fn eventsub() -> impl IntoResponse {
-    (StatusCode::OK, Html("EventSub".to_string()))
+    Ok(())
 }
 
 async fn shutdown_signal() {
@@ -99,7 +119,7 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    println!("Shutting down gracefully...");
+    tracing::info!("Shutting down gracefully...");
 }
 
 pub async fn health() -> &'static str {
