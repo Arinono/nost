@@ -30,6 +30,13 @@ fn install_tracing() {
         .map(|f| {
             f.add_directive("hyper=error".parse().expect("could not make directive"))
                 .add_directive("rustls=error".parse().expect("could not make directive"))
+                .add_directive("reqwest=error".parse().expect("could not make directive"))
+                .add_directive(
+                    "twitch_api=debug"
+                        .parse()
+                        .expect("could not make directive"),
+                )
+                .add_directive("retainer=info".parse().expect("could not make directive"))
                 .add_directive(
                     "tower_http=debug"
                         .parse()

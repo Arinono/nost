@@ -12,3 +12,9 @@ build:
 
 deploy-whproxy:
   fly deploy -c fly.whproxy.toml
+
+secrets-whproxy:
+  fly secrets -c fly.whproxy.toml import < .env
+
+logs-whproxy:
+  fly -c fly.whproxy.toml logs

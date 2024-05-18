@@ -6,6 +6,10 @@ pub struct Environment {
     pub event_sub_secret: Secret,
     pub twitch_client_id: String,
     pub twitch_client_secret: Secret,
+    pub twitch_user_id: String,
+    pub twitch_eventsub_callback_url: String,
+    pub twitch_user_oauth_callback_url: String,
+    pub discord_webhook_url: Secret,
 }
 
 impl Secret {
@@ -67,11 +71,19 @@ impl Environment {
         let event_sub_secret = Self::secret("TWITCH_EVENTSUB_SECRET");
         let twitch_client_id = Self::string("TWITCH_CLIENT_ID");
         let twitch_client_secret = Self::secret("TWITCH_CLIENT_SECRET");
+        let twitch_user_id = Self::string("TWITCH_USER_ID");
+        let twitch_eventsub_callback_url = Self::string("TWITCH_EVENTSUB_CALLBACK_URL");
+        let twitch_user_oauth_callback_url = Self::string("TWITCH_USER_OAUTH_CALLBACK_URL");
+        let discord_webhook_url = Self::secret("DISCORD_WEBHOOK_URL");
 
         Self {
             event_sub_secret,
             twitch_client_id,
             twitch_client_secret,
+            twitch_user_id,
+            twitch_eventsub_callback_url,
+            twitch_user_oauth_callback_url,
+            discord_webhook_url,
         }
     }
 }
