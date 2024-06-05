@@ -4,9 +4,14 @@ use axum::{
     http::{self, StatusCode},
     response::IntoResponse,
 };
+use chrono::Utc;
 use twitch_api::eventsub::{channel::ChannelFollowV2Payload, event::Event};
 
-use crate::{discord::DiscordNotifier, AppState};
+use crate::{
+    airtable::{Airtable, User},
+    discord::DiscordNotifier,
+    AppState,
+};
 
 const TWI_MSG_ID: &str = "Twitch-Eventsub-Message-Id";
 // const TWI_MSG_SIG: &str = "Twitch-Eventsub-Message-Signature";
@@ -80,6 +85,11 @@ pub async fn eventsub(
 
     let discord =
         DiscordNotifier::new(app_state.env.discord_webhook_url.secret_str().to_owned()).await;
+    let airtable = Airtable::new(
+        app_state.env.airtable_api_token.clone(),
+        app_state.env.airtable_base_id.clone(),
+        app_state.airtable.clone(),
+    );
 
     match event {
         Event::ChannelFollowV2(P {
@@ -91,6 +101,31 @@ pub async fn eventsub(
         }) => {
             tracing::info!("got follow event from {} ({})", user_name, user_id);
             discord.new_follower(user_name.to_string()).await;
+            let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
+
+            match record {
+                None => {
+                    let new_user = User::builder()
+                        .twitch_id(user_id.to_string())
+                        .display_name(user_name.to_string())
+                        .followed_at(Utc::now())
+                        .build();
+
+                    let _ = airtable
+                        .create_user(new_user)
+                        .await
+                        .expect("Failed to create user");
+                }
+                Some(record) => {
+                    let mut update_record = record.clone();
+                    update_record.fields.follower_since = Some(Utc::now().to_rfc3339());
+
+                    let _ = airtable
+                        .update_user(update_record)
+                        .await
+                        .expect("Failed to update user");
+                }
+            }
         }
         _ => {}
     }

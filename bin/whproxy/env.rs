@@ -10,6 +10,8 @@ pub struct Environment {
     pub twitch_eventsub_callback_url: String,
     pub twitch_user_oauth_callback_url: String,
     pub discord_webhook_url: Secret,
+    pub airtable_base_id: String,
+    pub airtable_api_token: Secret,
 }
 
 impl Secret {
@@ -75,6 +77,8 @@ impl Environment {
         let twitch_eventsub_callback_url = Self::string("TWITCH_EVENTSUB_CALLBACK_URL");
         let twitch_user_oauth_callback_url = Self::string("TWITCH_USER_OAUTH_CALLBACK_URL");
         let discord_webhook_url = Self::secret("DISCORD_WEBHOOK_URL");
+        let airtable_base_id = Self::string("AIRTABLE_BASE_ID");
+        let airtable_api_token = Self::secret("AIRTABLE_API_TOKEN");
 
         Self {
             event_sub_secret,
@@ -84,6 +88,8 @@ impl Environment {
             twitch_eventsub_callback_url,
             twitch_user_oauth_callback_url,
             discord_webhook_url,
+            airtable_base_id,
+            airtable_api_token,
         }
     }
 }

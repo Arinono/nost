@@ -310,8 +310,10 @@ checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-targets 0.52.5",
 ]
 
@@ -1042,6 +1044,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "chrono",
  "color-eyre",
  "dotenvy",
  "eyre",
@@ -1066,6 +1069,7 @@ dependencies = [
  "twitch_api",
  "twitch_oauth2",
  "twitch_types",
+ "url",
 ]
 
 [[package]]

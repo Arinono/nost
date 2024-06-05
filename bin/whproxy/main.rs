@@ -1,3 +1,5 @@
+mod airtable;
+mod api;
 mod discord;
 mod env;
 mod eventsub;
@@ -31,6 +33,7 @@ pub struct AppState {
     pub token: Arc<tokio::sync::RwLock<twitch_oauth2::AppAccessToken>>,
     pub client: HelixClient<'static, reqwest::Client>,
     pub retainer: Arc<retainer::Cache<String, String>>,
+    pub airtable: Arc<retainer::Cache<String, airtable::Record>>,
 }
 
 #[derive(Debug)]
@@ -67,11 +70,21 @@ async fn main() -> Result<(), eyre::Report> {
         Ok::<(), eyre::Report>(())
     });
 
+    let airtable_cache = Arc::new(retainer::Cache::<String, airtable::Record>::new());
+    let air_ret = airtable_cache.clone();
+    let airtable_cleanup = tokio::spawn(async move {
+        air_ret
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(86400 / 2))
+            .await;
+        Ok::<(), eyre::Report>(())
+    });
+
     let app_state = AppState {
         env: Arc::new(env.clone()),
         token: token.clone(),
         client: client.clone(),
         retainer: retainer.clone(),
+        airtable: airtable_cache.clone(),
     };
 
     let cors = CorsLayer::new()
@@ -107,10 +120,15 @@ async fn main() -> Result<(), eyre::Report> {
 
     // build our application with a route
     let app = Router::new()
-        .route("/twitch/eventsub", post(eventsub::eventsub))
-        .route("/health", get(health))
+        // install app
         .route("/twitch/oauth/authorize", get(twitch_oauth::authorize))
         .route("/twitch/oauth/callback", get(twitch_oauth::callback))
+        // eventsub
+        .route("/twitch/eventsub", post(eventsub::eventsub))
+        // api
+        .route("/api/user/latest_follow", get(api::latest_follow))
+        //misc
+        .route("/health", get(health))
         .route("/*catchall", get(not_found))
         .layer(cors)
         .layer(error_handler)
@@ -145,7 +163,8 @@ async fn main() -> Result<(), eyre::Report> {
             client.clone(),
             token.clone()
         ))),
-        flatten(retainer_cleanup)
+        flatten(retainer_cleanup),
+        flatten(airtable_cleanup)
     )?;
 
     Ok(())
