@@ -74,7 +74,7 @@ async fn main() -> Result<(), eyre::Report> {
     let air_ret = airtable_cache.clone();
     let airtable_cleanup = tokio::spawn(async move {
         air_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(86400 / 2))
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
             .await;
         Ok::<(), eyre::Report>(())
     });

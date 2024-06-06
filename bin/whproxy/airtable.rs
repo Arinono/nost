@@ -224,7 +224,7 @@ impl Airtable {
                         .insert(
                             "most_recent_follow".to_owned(),
                             record.clone(),
-                            Duration::from_secs(300),
+                            Duration::from_secs(30),
                         )
                         .await;
 
