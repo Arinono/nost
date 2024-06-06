@@ -100,32 +100,37 @@ pub async fn eventsub(
             ..
         }) => {
             tracing::info!("got follow event from {} ({})", user_name, user_id);
-            discord.new_follower(user_name.to_string()).await;
-            let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
 
-            match record {
-                None => {
-                    let new_user = User::builder()
-                        .twitch_id(user_id.to_string())
-                        .display_name(user_name.to_string())
-                        .followed_at(Utc::now())
-                        .build();
+            tokio::spawn(async move {
+                discord.new_follower(user_name.to_string()).await;
+                let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
 
-                    let _ = airtable
-                        .create_user(new_user)
-                        .await
-                        .expect("Failed to create user");
+                match record {
+                    None => {
+                        let new_user = User::builder()
+                            .twitch_id(user_id.to_string())
+                            .display_name(user_name.to_string())
+                            .followed_at(Utc::now())
+                            .build();
+
+                        let _ = airtable
+                            .create_user(new_user)
+                            .await
+                            .expect("Failed to create user");
+                    }
+                    Some(record) => {
+                        let mut update_record = record.clone();
+                        update_record.fields.follower_since = Some(Utc::now().to_rfc3339());
+
+                        let _ = airtable
+                            .update_user(update_record)
+                            .await
+                            .expect("Failed to update user");
+                    }
                 }
-                Some(record) => {
-                    let mut update_record = record.clone();
-                    update_record.fields.follower_since = Some(Utc::now().to_rfc3339());
+            });
 
-                    let _ = airtable
-                        .update_user(update_record)
-                        .await
-                        .expect("Failed to update user");
-                }
-            }
+            return (StatusCode::OK, "EventSub".to_string());
         }
         _ => {}
     }

@@ -240,7 +240,6 @@ impl Airtable {
         let mut fields = serde_json::json!({
                 "display_name": user.display_name,
                 "twitch_id": user.twitch_id,
-                "created_at": user.created_at,
         });
 
         if let Some(followed_at) = &user.follower_since {
