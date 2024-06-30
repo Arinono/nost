@@ -258,58 +258,66 @@ pub async fn eventsub(
             let tier = SubTier::from(tier);
             let total = if total > 0 { total as usize } else { 0 };
 
+            tracing::info!(
+                "got sub gift event from {} tier {} total {}",
+                username,
+                tier,
+                total,
+            );
             discord.subgift(&username, total, &tier).await;
 
-            let user = match twitch_id {
-                Some(id) => airtable.get_user_by_twitch_id(id.to_string()).await,
-                None => None,
-            };
-            let user_id = match user.clone() {
-                Some(user) => Some(user.id),
-                None => None,
-            };
+            tokio::spawn(async move {
+                let user = match twitch_id {
+                    Some(id) => airtable.get_user_by_twitch_id(id.to_string()).await,
+                    None => None,
+                };
+                let user_id = match user.clone() {
+                    Some(user) => Some(user.id),
+                    None => None,
+                };
 
-            let subgift = Subgift::builder()
-                .user_id(user_id.clone())
-                .display_name(if user_id.is_none() {
-                    None
-                } else {
-                    Some(username)
-                })
-                .number(total)
-                .tier(tier)
-                .build();
-
-            let record_id = airtable
-                .create_subgift(subgift)
-                .await
-                .expect("Failed to create subgift");
-
-            if !is_anonymous && user.is_some() {
-                let mut update_user = user.clone().expect("User is None");
-                if update_user.fields.subgifts.is_none() {
-                    update_user.fields.subgifts = Some(vec![record_id]);
-                } else {
-                    update_user
-                        .fields
-                        .subgifts
-                        .as_mut()
-                        .unwrap()
-                        .push(record_id);
-                }
-                if let Some(cumulative_total) = cumulative_total {
-                    update_user.fields.subgift_total = if cumulative_total > 0 {
-                        Some(cumulative_total as usize)
-                    } else {
+                let subgift = Subgift::builder()
+                    .user_id(user_id.clone())
+                    .display_name(if user_id.is_none() {
                         None
-                    };
-                }
+                    } else {
+                        Some(username)
+                    })
+                    .number(total)
+                    .tier(tier)
+                    .build();
 
-                let _ = airtable
-                    .update_user(update_user)
+                let record_id = airtable
+                    .create_subgift(subgift)
                     .await
-                    .expect("Failed to update user");
-            }
+                    .expect("Failed to create subgift");
+
+                if !is_anonymous && user.is_some() {
+                    let mut update_user = user.clone().expect("User is None");
+                    if update_user.fields.subgifts.is_none() {
+                        update_user.fields.subgifts = Some(vec![record_id]);
+                    } else {
+                        update_user
+                            .fields
+                            .subgifts
+                            .as_mut()
+                            .unwrap()
+                            .push(record_id);
+                    }
+                    if let Some(cumulative_total) = cumulative_total {
+                        update_user.fields.subgift_total = if cumulative_total > 0 {
+                            Some(cumulative_total as usize)
+                        } else {
+                            None
+                        };
+                    }
+
+                    let _ = airtable
+                        .update_user(update_user)
+                        .await
+                        .expect("Failed to update user");
+                }
+            });
 
             return ack;
         }
