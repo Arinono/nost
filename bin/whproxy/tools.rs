@@ -29,20 +29,9 @@ fn install_tracing() {
         .or_else(|_| EnvFilter::try_new("debug"))
         .map(|f| {
             f.add_directive("hyper=error".parse().expect("could not make directive"))
-                .add_directive("rustls=error".parse().expect("could not make directive"))
-                .add_directive("reqwest=error".parse().expect("could not make directive"))
-                .add_directive(
-                    "twitch_api=debug"
-                        .parse()
-                        .expect("could not make directive"),
-                )
+                .add_directive("twitch_api=info".parse().expect("could not make directive"))
                 .add_directive("retainer=info".parse().expect("could not make directive"))
-                .add_directive(
-                    "tower_http=debug"
-                        .parse()
-                        .expect("could not make directive"),
-                )
-                .add_directive("whproxy=debug".parse().expect("could not make directive"))
+                .add_directive("tower_http=info".parse().expect("could not make directive"))
         })
         .expect("could not make filter layer");
 

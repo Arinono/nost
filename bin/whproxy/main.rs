@@ -2,14 +2,14 @@ mod airtable;
 mod api;
 mod discord;
 mod env;
-mod eventsub;
+mod models;
 mod tools;
 mod twitch;
-mod twitch_oauth;
 
 use env::Environment;
 use eyre::Context;
 use tools::install_tools;
+use twitch_oauth2::Scope;
 
 use std::{net::SocketAddr, process::exit, sync::Arc, time::Duration};
 
@@ -23,7 +23,7 @@ use axum::{
 use tokio::{signal, task::JoinHandle};
 use tower::{BoxError, ServiceBuilder};
 use tower_http::{catch_panic::CatchPanicLayer, cors::CorsLayer, trace::TraceLayer};
-use twitch_api::helix::HelixClient;
+use twitch_api::helix::{channels::get_channel_followers, HelixClient};
 
 const PORT: u16 = 3000;
 
@@ -33,7 +33,8 @@ pub struct AppState {
     pub token: Arc<tokio::sync::RwLock<twitch_oauth2::AppAccessToken>>,
     pub client: HelixClient<'static, reqwest::Client>,
     pub retainer: Arc<retainer::Cache<String, String>>,
-    pub airtable: Arc<retainer::Cache<String, airtable::Record>>,
+    pub user_cache: Arc<retainer::Cache<String, models::UserRecord>>,
+    pub subgift_cache: Arc<retainer::Cache<String, models::SubgiftRecord>>,
 }
 
 #[derive(Debug)]
@@ -48,17 +49,20 @@ async fn main() -> Result<(), eyre::Report> {
 
     let env = Environment::new();
 
-    tracing::debug!("App starting with:\n{:#?}", env);
+    tracing::info!("App starting with:\n{:#?}", env);
 
     let client: HelixClient<reqwest::Client> = HelixClient::default();
     let token = twitch_oauth2::AppAccessToken::get_app_access_token(
         &client,
         twitch_oauth2::ClientId::new(env.twitch_client_id.clone()),
         twitch_oauth2::ClientSecret::new(env.twitch_client_secret.secret_str().to_owned()),
-        vec![],
+        vec![
+            Scope::ModeratorReadFollowers,
+            Scope::ChannelReadSubscriptions,
+        ],
     )
     .await?;
-    tracing::debug!("Token: {:#?}", token);
+    tracing::debug!("Token: {:?}", token);
 
     let token = Arc::new(tokio::sync::RwLock::new(token));
 
@@ -70,10 +74,17 @@ async fn main() -> Result<(), eyre::Report> {
         Ok::<(), eyre::Report>(())
     });
 
-    let airtable_cache = Arc::new(retainer::Cache::<String, airtable::Record>::new());
-    let air_ret = airtable_cache.clone();
+    let user_cache = Arc::new(retainer::Cache::<String, models::UserRecord>::new());
+    let user_cache_ret = user_cache.clone();
+
+    let subgift_cache = Arc::new(retainer::Cache::<String, models::SubgiftRecord>::new());
+    let subgift_cache_ret = subgift_cache.clone();
+
     let airtable_cleanup = tokio::spawn(async move {
-        air_ret
+        user_cache_ret
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
+            .await;
+        subgift_cache_ret
             .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
             .await;
         Ok::<(), eyre::Report>(())
@@ -84,7 +95,8 @@ async fn main() -> Result<(), eyre::Report> {
         token: token.clone(),
         client: client.clone(),
         retainer: retainer.clone(),
-        airtable: airtable_cache.clone(),
+        user_cache: user_cache.clone(),
+        subgift_cache: subgift_cache.clone(),
     };
 
     let cors = CorsLayer::new()
@@ -121,12 +133,14 @@ async fn main() -> Result<(), eyre::Report> {
     // build our application with a route
     let app = Router::new()
         // install app
-        .route("/twitch/oauth/authorize", get(twitch_oauth::authorize))
-        .route("/twitch/oauth/callback", get(twitch_oauth::callback))
+        .route("/twitch/oauth/authorize", get(twitch::oauth::authorize))
+        .route("/twitch/oauth/callback", get(twitch::oauth::callback))
         // eventsub
-        .route("/twitch/eventsub", post(eventsub::eventsub))
+        .route("/twitch/eventsub", post(twitch::eventsub::eventsub))
         // api
         .route("/api/user/latest_follow", get(api::latest_follow))
+        .route("/api/user/latest_subscriber", get(api::latest_subscriber))
+        .route("/api/user/latest_subgift", get(api::latest_subgift))
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))
@@ -155,6 +169,14 @@ async fn main() -> Result<(), eyre::Report> {
             .map_err(|e| eyre::eyre!("Server error: {:#}", e))
     });
 
+    // let twitch_broadcaster_id = env.twitch_broadcaster_id.clone();
+    // let client_clone = client.clone();
+    // let follower_cleanup = tokio::spawn(async move {
+    //     followers_monitor(twitch_user_id, twitch_token, client_clone).await;
+    //
+    //     Ok::<(), eyre::Report>(())
+    // });
+
     tokio::try_join!(
         flatten(ec_monitor),
         flatten(server),
@@ -164,11 +186,26 @@ async fn main() -> Result<(), eyre::Report> {
             token.clone()
         ))),
         flatten(retainer_cleanup),
-        flatten(airtable_cleanup)
+        flatten(airtable_cleanup),
+        // flatten(follower_cleanup)
     )?;
 
     Ok(())
 }
+
+// async fn followers_monitor(
+//     user_id: String,
+//     token: twitch_oauth2::AppAccessToken,
+//     client: HelixClient<'static, reqwest::Client>,
+// ) {
+//     tracing::info!("Monitoring followers for user: {}", user_id);
+//     let request = get_channel_followers::GetChannelFollowersRequest::broadcaster_id(&user_id);
+//     let followers: Vec<get_channel_followers::Follower> =
+//         client.req_get(request, &token).await.unwrap().data;
+//
+//     tracing::debug!("Followers: {:#?}", followers);
+//     tokio::time::sleep(Duration::from_secs(86400)).await;
+// }
 
 async fn flatten<T>(handle: JoinHandle<Result<T, eyre::Report>>) -> Result<T, eyre::Report> {
     match handle.await {

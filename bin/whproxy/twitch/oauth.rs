@@ -24,7 +24,7 @@ fn nonce(length: usize) -> String {
 pub async fn authorize(State(app_state): State<AppState>) -> impl IntoResponse {
     let client_id = app_state.env.twitch_client_id.clone();
 
-    let scope = "moderator:read:followers";
+    let scope = "moderator:read:followers channel:read:subscriptions";
     let state = nonce(30);
 
     let url = Url::parse(&format!(
@@ -36,7 +36,7 @@ pub async fn authorize(State(app_state): State<AppState>) -> impl IntoResponse {
     )).expect("valid url");
 
     tracing::info!("Generated URL: {}", url);
-    tracing::debug!(state = state.as_str(), "Store state");
+    tracing::info!(state = state.as_str(), "Store state");
 
     app_state
         .retainer
@@ -67,10 +67,10 @@ pub async fn callback(
 ) -> Result<impl IntoResponse, Error> {
     let code = query.code.clone();
     let state = query.state.clone();
-    tracing::debug!(code = code, state = state, "Callback hit");
+    tracing::info!(code = code, state = state, "Callback hit");
 
     let saved_state = app_state.retainer.remove(&state).await;
-    tracing::debug!(
+    tracing::info!(
         found_state = if saved_state.is_some() { true } else { false },
         "Retrieved state"
     );
@@ -103,7 +103,7 @@ pub async fn callback(
         .await?;
 
     let msg = "App successfully authorized";
-    tracing::debug!(msg = msg, "Callback success");
+    tracing::info!(msg = msg, "Callback success");
 
     Ok((StatusCode::OK, Html(msg.to_string())))
 }
