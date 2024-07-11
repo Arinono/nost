@@ -9,6 +9,7 @@ pub async fn latest_follow(State(state): State<AppState>) -> impl IntoResponse {
         state.env.airtable_base_id.clone(),
         state.user_cache.clone(),
         state.subgift_cache.clone(),
+        state.bits_cache.clone(),
     );
 
     match airtable_client.get_most_recent_follow().await {
@@ -23,6 +24,7 @@ pub async fn latest_subscriber(State(state): State<AppState>) -> impl IntoRespon
         state.env.airtable_base_id.clone(),
         state.user_cache.clone(),
         state.subgift_cache.clone(),
+        state.bits_cache.clone(),
     );
 
     match airtable_client.get_most_recent_subscriber().await {
@@ -37,10 +39,26 @@ pub async fn latest_subgift(State(state): State<AppState>) -> impl IntoResponse 
         state.env.airtable_base_id.clone(),
         state.user_cache.clone(),
         state.subgift_cache.clone(),
+        state.bits_cache.clone(),
     );
 
     match airtable_client.get_most_recent_subgift().await {
         Some(subgift) => (StatusCode::OK, subgift),
+        None => (StatusCode::NOT_FOUND, "No subgift found".to_owned()),
+    }
+}
+
+pub async fn latest_bits(State(state): State<AppState>) -> impl IntoResponse {
+    let airtable_client = Airtable::new(
+        state.env.airtable_api_token.clone(),
+        state.env.airtable_base_id.clone(),
+        state.user_cache.clone(),
+        state.subgift_cache.clone(),
+        state.bits_cache.clone(),
+    );
+
+    match airtable_client.get_most_recent_bits().await {
+        Some(bits) => (StatusCode::OK, bits),
         None => (StatusCode::NOT_FOUND, "No subgift found".to_owned()),
     }
 }

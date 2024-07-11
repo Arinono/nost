@@ -1,4 +1,4 @@
-use super::{misc::SubTier, subgift::SubgiftRecordId, RecordId};
+use super::{bits::BitsRecordId, misc::SubTier, subgift::SubgiftRecordId, RecordId};
 
 pub type UserRecordId = RecordId;
 
@@ -13,6 +13,7 @@ pub struct User {
     pub subscription_tier: Option<SubTier>,
     pub subgift_total: Option<usize>,
     pub subgifts: Option<Vec<SubgiftRecordId>>,
+    pub bits: Option<Vec<BitsRecordId>>,
 }
 
 impl Default for User {
@@ -27,6 +28,7 @@ impl Default for User {
             subscription_tier: None,
             subgift_total: None,
             subgifts: None,
+            bits: None,
         }
     }
 }
@@ -43,6 +45,7 @@ impl User {
             subscription_tier: None,
             subgift_total: None,
             subgifts: None,
+            bits: None,
         }
     }
 
@@ -99,6 +102,15 @@ impl UserBuilder {
             cur_subgifts.extend(subgifts);
         } else {
             self.user.subgifts = Some(subgifts);
+        }
+        self
+    }
+
+    pub fn bits(mut self, bits: Vec<BitsRecordId>) -> Self {
+        if let Some(cur_bits) = &mut self.user.bits {
+            cur_bits.extend(bits);
+        } else {
+            self.user.bits = Some(bits);
         }
         self
     }

@@ -7,12 +7,12 @@ use axum::{
 use chrono::Utc;
 use twitch_api::eventsub::{
     channel::{
-        ChannelFollowV2Payload, ChannelSubscribeV1Payload, ChannelSubscriptionEndV1Payload,
-        ChannelSubscriptionGiftV1Payload,
+        ChannelCheerV1Payload, ChannelFollowV2Payload, ChannelSubscribeV1Payload,
+        ChannelSubscriptionEndV1Payload, ChannelSubscriptionGiftV1Payload,
     },
     event::Event,
 };
-use twitch_types::Nickname;
+use twitch_types::{DisplayName, Nickname};
 
 use crate::{
     airtable::Airtable,
@@ -95,6 +95,7 @@ pub async fn eventsub(
         app_state.env.airtable_base_id.clone(),
         app_state.user_cache.clone(),
         app_state.subgift_cache.clone(),
+        app_state.bits_cache.clone(),
     );
 
     match event {
@@ -345,6 +346,102 @@ pub async fn eventsub(
             });
 
             return ack;
+        }
+        Event::ChannelCheerV1(P {
+            message:
+                M::Notification(ChannelCheerV1Payload {
+                    user_id: twitch_id,
+                    user_name,
+                    bits,
+                    message,
+                    is_anonymous,
+                    ..
+                }),
+            ..
+        }) => {
+            let username = match is_anonymous {
+                true => "Anonymous".to_string(),
+                false => user_name
+                    .unwrap_or(DisplayName::from("Anonymous"))
+                    .to_string(),
+            };
+            let number = if bits > 0 { bits as usize } else { 0 };
+
+            tracing::info!(
+                "got bits event from {} bits {} message {}",
+                username,
+                number,
+                message,
+            );
+            discord.bits(&username, number, &message).await;
+
+            tokio::spawn(async move {
+                let user = match &twitch_id {
+                    Some(id) => airtable.get_user_by_twitch_id(id.to_string()).await,
+                    None => None,
+                };
+
+                if is_anonymous {
+                    let bits = models::bits::Bits::builder()
+                        .user_id(None)
+                        .display_name(Some(username))
+                        .number(number)
+                        .message(message)
+                        .build();
+
+                    let _ = airtable
+                        .create_bits(bits)
+                        .await
+                        .expect("Failed to create bits");
+
+                    return;
+                }
+
+                match user {
+                    None => {
+                        let twitch_id_s = match twitch_id {
+                            Some(id) => id.to_string(),
+                            None => "".to_string(),
+                        };
+                        let new_user = User::builder()
+                            .twitch_id(twitch_id_s)
+                            .display_name(username.clone())
+                            .build();
+
+                        let user_record_id = Some(
+                            airtable
+                                .create_user(new_user)
+                                .await
+                                .expect("Failed to create user"),
+                        );
+
+                        let bits = models::bits::Bits::builder()
+                            .user_id(user_record_id.clone())
+                            .display_name(Some(username))
+                            .number(number)
+                            .message(message)
+                            .build();
+
+                        let _ = airtable
+                            .create_bits(bits)
+                            .await
+                            .expect("Failed to create bits");
+                    }
+                    Some(user) => {
+                        let bits = models::bits::Bits::builder()
+                            .user_id(Some(user.id.clone()))
+                            .display_name(Some(user.fields.display_name))
+                            .number(number)
+                            .message(message)
+                            .build();
+
+                        let _ = airtable
+                            .create_bits(bits)
+                            .await
+                            .expect("Failed to create bits");
+                    }
+                }
+            });
         }
         _ => {}
     }

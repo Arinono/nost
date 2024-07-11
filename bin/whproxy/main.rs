@@ -35,6 +35,7 @@ pub struct AppState {
     pub retainer: Arc<retainer::Cache<String, String>>,
     pub user_cache: Arc<retainer::Cache<String, models::UserRecord>>,
     pub subgift_cache: Arc<retainer::Cache<String, models::SubgiftRecord>>,
+    pub bits_cache: Arc<retainer::Cache<String, models::BitsRecord>>,
 }
 
 #[derive(Debug)]
@@ -59,6 +60,7 @@ async fn main() -> Result<(), eyre::Report> {
         vec![
             Scope::ModeratorReadFollowers,
             Scope::ChannelReadSubscriptions,
+            Scope::BitsRead,
         ],
     )
     .await?;
@@ -80,11 +82,17 @@ async fn main() -> Result<(), eyre::Report> {
     let subgift_cache = Arc::new(retainer::Cache::<String, models::SubgiftRecord>::new());
     let subgift_cache_ret = subgift_cache.clone();
 
+    let bits_cache = Arc::new(retainer::Cache::<String, models::BitsRecord>::new());
+    let bits_cache_ret = bits_cache.clone();
+
     let airtable_cleanup = tokio::spawn(async move {
         user_cache_ret
             .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
             .await;
         subgift_cache_ret
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
+            .await;
+        bits_cache_ret
             .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
             .await;
         Ok::<(), eyre::Report>(())
@@ -97,6 +105,7 @@ async fn main() -> Result<(), eyre::Report> {
         retainer: retainer.clone(),
         user_cache: user_cache.clone(),
         subgift_cache: subgift_cache.clone(),
+        bits_cache: bits_cache.clone(),
     };
 
     let cors = CorsLayer::new()
@@ -141,6 +150,7 @@ async fn main() -> Result<(), eyre::Report> {
         .route("/api/user/latest_follow", get(api::latest_follow))
         .route("/api/user/latest_subscriber", get(api::latest_subscriber))
         .route("/api/user/latest_subgift", get(api::latest_subgift))
+        .route("/api/user/latest_bits", get(api::latest_bits))
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))

@@ -61,7 +61,7 @@ pub mod subscribe_end {
 
     use super::*;
 
-    pub fn subscription_end_exists<'a>(
+    pub fn subscription_exists<'a>(
         eventsub_callback_url: &'a str,
         broadcaster_id: &'a str,
     ) -> impl 'a + FnMut(&EventSubSubscription) -> bool {

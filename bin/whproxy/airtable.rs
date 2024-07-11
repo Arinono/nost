@@ -3,9 +3,10 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 use crate::{
     env::Secret,
     models::{
+        bits::{Bits, BitsRecordId},
         subgift::{Subgift, SubgiftRecordId},
         user::{User, UserRecordId},
-        SubgiftRecord, SubgiftRecords, UserRecord, UserRecords,
+        BitsRecord, BitsRecords, SubgiftRecord, SubgiftRecords, UserRecord, UserRecords,
     },
 };
 
@@ -14,6 +15,7 @@ pub struct Airtable {
     token: Secret,
     user_cache: Arc<retainer::Cache<String, UserRecord>>,
     subgift_cache: Arc<retainer::Cache<String, SubgiftRecord>>,
+    bits_cache: Arc<retainer::Cache<String, BitsRecord>>,
     base_id: String,
 }
 
@@ -42,6 +44,7 @@ struct UpdateRecords {
 pub enum Base {
     Users,
     Subgifts,
+    Bits,
 }
 
 impl FromStr for Base {
@@ -51,7 +54,18 @@ impl FromStr for Base {
         match s {
             "users" => Ok(Self::Users),
             "subgifts" => Ok(Self::Subgifts),
+            "bits" => Ok(Self::Bits),
             _ => Err(format!("Invalid base: {}", s)),
+        }
+    }
+}
+
+impl Into<String> for Base {
+    fn into(self) -> String {
+        match self {
+            Base::Users => "users".to_string(),
+            Base::Subgifts => "subgifts".to_string(),
+            Base::Bits => "bits".to_string(),
         }
     }
 }
@@ -61,6 +75,7 @@ impl From<Base> for &'static str {
         match base {
             Base::Users => "users",
             Base::Subgifts => "subgifts",
+            Base::Bits => "bits",
         }
     }
 }
@@ -108,6 +123,7 @@ impl Airtable {
         base_id: String,
         user_cache: Arc<retainer::Cache<String, UserRecord>>,
         subgift_cache: Arc<retainer::Cache<String, SubgiftRecord>>,
+        bits_cache: Arc<retainer::Cache<String, BitsRecord>>,
     ) -> Self {
         let client = reqwest::Client::new();
 
@@ -116,6 +132,7 @@ impl Airtable {
             token,
             user_cache,
             subgift_cache,
+            bits_cache,
             base_id,
         }
     }
@@ -366,6 +383,77 @@ impl Airtable {
         }
     }
 
+    pub async fn get_most_recent_bits(&self) -> Option<String> {
+        let cache_key = "most_recent_bits".to_owned();
+
+        if let Some(record) = self.bits_cache.get(&cache_key).await {
+            let display_name = record.fields.display_name.clone();
+            let true_name = match &display_name {
+                Some(name) => name.first().expect("Display name is empty").clone(),
+                None => "Anonymous".to_owned(),
+            };
+            return Some(format!("{} ({})", true_name, record.fields.number));
+        }
+
+        let params = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("view", "most_recent_bits")
+            .append_pair("maxRecords", "1")
+            .finish();
+
+        let base: String = Base::Bits.into();
+        let url = format!("{}?{}", self.base_url(&base), params);
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .expect("Failed to get most recent bits from Airtable");
+
+        if response.status().is_success() {
+            let record: BitsRecords = response
+                .json()
+                .await
+                .expect("Failed to parse most recent bits from Airtable");
+            let record = record.records.first();
+
+            match record {
+                None => None,
+                Some(record) => {
+                    let user_id = match &record.fields.user_id {
+                        None => None,
+                        Some(user_id) => Some(user_id.first().expect("User ID is empty").clone()),
+                    };
+
+                    match user_id {
+                        None => Some(format!("{} ({})", "Anonymous", record.fields.number)),
+                        Some(user_id) => {
+                            let mut record = record.clone();
+                            let user = self
+                                .get_user_by_record_id(user_id.clone())
+                                .await
+                                .expect("User not found");
+
+                            record.fields.display_name =
+                                Some(vec![user.fields.display_name.clone()]);
+                            self.bits_cache
+                                .insert(cache_key.clone(), record.clone(), Duration::from_secs(30))
+                                .await;
+
+                            Some(format!(
+                                "{} ({})",
+                                user.fields.display_name, record.fields.number
+                            ))
+                        }
+                    }
+                }
+            }
+        } else {
+            None
+        }
+    }
+
     fn user_fields(user: &User) -> serde_json::Value {
         let mut fields = serde_json::json!({
                 "display_name": user.display_name,
@@ -418,6 +506,24 @@ impl Airtable {
         });
 
         match &subgift.user_id {
+            Some(user_id) => {
+                fields["user_id"] = user_id.clone().into();
+            }
+            None => {
+                fields["user_id"] = serde_json::Value::Array(vec![]);
+            }
+        }
+
+        fields
+    }
+
+    fn bits_fields(bits: &Bits) -> serde_json::Value {
+        let mut fields = serde_json::json!({
+            "number": bits.number,
+            "message": bits.message,
+        });
+
+        match &bits.user_id {
             Some(user_id) => {
                 fields["user_id"] = user_id.clone().into();
             }
@@ -568,6 +674,43 @@ impl Airtable {
                 Ok(record.id.clone())
             }
             false => Err(response.error_for_status().unwrap_err()),
+        }
+    }
+
+    pub async fn create_bits(&self, bits: Bits) -> Result<BitsRecordId, reqwest::Error> {
+        let url = self.base_url("bits");
+
+        let body = CreateRecords::from(CreateRecordFields {
+            fields: Self::bits_fields(&bits),
+        });
+
+        let reqwest = self
+            .client
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .json(&body);
+
+        let response = reqwest.send().await?;
+
+        match response.status().is_success() {
+            false => Err(response.error_for_status().unwrap_err()),
+            true => {
+                let data = response.json::<BitsRecords>().await?;
+                let record = data.records.first().unwrap();
+                match &record.fields.user_id {
+                    Some(user_id) => {
+                        let user_id = user_id.first().expect("User ID is empty");
+                        self.bits_cache
+                            .insert(user_id.clone(), record.clone(), Self::day_in_secs())
+                            .await;
+                    }
+                    None => {
+                        tracing::warn!("User ID is None");
+                    }
+                }
+
+                Ok(record.id.clone())
+            }
         }
     }
 }

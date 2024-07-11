@@ -1,3 +1,4 @@
+mod bits;
 pub mod eventsub;
 mod follower;
 pub mod oauth;
@@ -51,14 +52,19 @@ pub async fn eventsub_register(
             &state.env.twitch_broadcaster_id,
         ));
 
-        let subscribe_end_exists =
-            subs.iter()
-                .any(subscriber::subscribe_end::subscription_end_exists(
-                    &state.env.twitch_eventsub_callback_url,
-                    &state.env.twitch_broadcaster_id,
-                ));
+        let subscribe_end_exists = subs
+            .iter()
+            .any(subscriber::subscribe_end::subscription_exists(
+                &state.env.twitch_eventsub_callback_url,
+                &state.env.twitch_broadcaster_id,
+            ));
 
-        let subgift_exists = subs.iter().any(subgift::subgift_exists(
+        let subgift_exists = subs.iter().any(subgift::subscription_exists(
+            &state.env.twitch_eventsub_callback_url,
+            &state.env.twitch_broadcaster_id,
+        ));
+
+        let bits_exists = subs.iter().any(bits::subscription_exists(
             &state.env.twitch_eventsub_callback_url,
             &state.env.twitch_broadcaster_id,
         ));
@@ -68,6 +74,7 @@ pub async fn eventsub_register(
             subscriber = subscribe_exists,
             subscriber_end = subscribe_end_exists,
             subgift = subgift_exists,
+            bits = bits_exists,
             "existing subs"
         );
 
@@ -125,6 +132,20 @@ pub async fn eventsub_register(
 
             if !subgift_exists {
                 if subgift::create_subscription(
+                    &state.env.twitch_broadcaster_id,
+                    &token,
+                    &helix,
+                    &transport,
+                )
+                .await
+                .is_err()
+                {
+                    continue;
+                }
+            }
+
+            if !bits_exists {
+                if bits::create_subscription(
                     &state.env.twitch_broadcaster_id,
                     &token,
                     &helix,
