@@ -16,7 +16,7 @@ pub mod subscribe {
     ) -> impl 'a + FnMut(&EventSubSubscription) -> bool {
         move |sub: &EventSubSubscription| {
             sub.transport.as_webhook().expect("webhook").callback == eventsub_callback_url
-                && sub.version == "2"
+                && sub.version == "1"
                 && sub.type_ == EventType::ChannelSubscribe
                 && sub
                     .condition
@@ -67,7 +67,7 @@ pub mod subscribe_end {
     ) -> impl 'a + FnMut(&EventSubSubscription) -> bool {
         move |sub: &EventSubSubscription| {
             sub.transport.as_webhook().expect("webhook").callback == eventsub_callback_url
-                && sub.version == "2"
+                && sub.version == "1"
                 && sub.type_ == EventType::ChannelSubscriptionEnd
                 && sub
                     .condition

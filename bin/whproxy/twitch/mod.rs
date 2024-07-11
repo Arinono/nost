@@ -93,45 +93,48 @@ pub async fn eventsub_register(
             }
         }
 
-        if !subscribe_exists {
-            if subscriber::subscribe::create_subscription(
-                &state.env.twitch_broadcaster_id,
-                &token,
-                &helix,
-                &transport,
-            )
-            .await
-            .is_err()
-            {
-                continue;
+        // can't register these events locally
+        if !state.env.dev_mode {
+            if !subscribe_exists {
+                if subscriber::subscribe::create_subscription(
+                    &state.env.twitch_broadcaster_id,
+                    &token,
+                    &helix,
+                    &transport,
+                )
+                .await
+                .is_err()
+                {
+                    continue;
+                }
             }
-        }
 
-        if !subscribe_end_exists {
-            if subscriber::subscribe_end::create_subscription(
-                &state.env.twitch_broadcaster_id,
-                &token,
-                &helix,
-                &transport,
-            )
-            .await
-            .is_err()
-            {
-                continue;
+            if !subscribe_end_exists {
+                if subscriber::subscribe_end::create_subscription(
+                    &state.env.twitch_broadcaster_id,
+                    &token,
+                    &helix,
+                    &transport,
+                )
+                .await
+                .is_err()
+                {
+                    continue;
+                }
             }
-        }
 
-        if !subgift_exists {
-            if subgift::create_subscription(
-                &state.env.twitch_broadcaster_id,
-                &token,
-                &helix,
-                &transport,
-            )
-            .await
-            .is_err()
-            {
-                continue;
+            if !subgift_exists {
+                if subgift::create_subscription(
+                    &state.env.twitch_broadcaster_id,
+                    &token,
+                    &helix,
+                    &transport,
+                )
+                .await
+                .is_err()
+                {
+                    continue;
+                }
             }
         }
     }

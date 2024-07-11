@@ -24,7 +24,7 @@ fn nonce(length: usize) -> String {
 pub async fn authorize(State(app_state): State<AppState>) -> impl IntoResponse {
     let client_id = app_state.env.twitch_client_id.clone();
 
-    let scope = "moderator:read:followers channel:read:subscriptions";
+    let scope = "moderator:read:followers channel:read:subscriptions bits:read";
     let state = nonce(30);
 
     let url = Url::parse(&format!(

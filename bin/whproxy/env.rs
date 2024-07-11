@@ -13,6 +13,7 @@ pub struct Environment {
     pub discord_webhook_url: Secret,
     pub airtable_base_id: String,
     pub airtable_api_token: Secret,
+    pub dev_mode: bool,
 }
 
 impl Secret {
@@ -81,6 +82,7 @@ impl Environment {
         let discord_webhook_url = Self::secret("DISCORD_WEBHOOK_URL");
         let airtable_base_id = Self::string("AIRTABLE_BASE_ID");
         let airtable_api_token = Self::secret("AIRTABLE_API_TOKEN");
+        let dev_mode = Self::string("DEV_MODE") == "true";
 
         Self {
             event_sub_secret,
@@ -93,6 +95,7 @@ impl Environment {
             discord_webhook_url,
             airtable_base_id,
             airtable_api_token,
+            dev_mode,
         }
     }
 }
