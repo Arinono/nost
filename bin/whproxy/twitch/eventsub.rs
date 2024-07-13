@@ -128,6 +128,7 @@ pub async fn eventsub(
                     Some(record) => {
                         let mut update_record = record.clone();
                         update_record.fields.follower_since = Some(Utc::now().to_rfc3339());
+                        update_record.fields.display_name = user_name.to_string();
 
                         let _ = airtable
                             .update_user(update_record)
@@ -179,6 +180,7 @@ pub async fn eventsub(
                         let mut update_user = record.clone();
                         update_user.fields.subscriber_since = Some(Utc::now().to_rfc3339());
                         update_user.fields.subscription_tier = Some(tier);
+                        update_user.fields.display_name = user_name.to_string();
 
                         let _ = airtable
                             .update_user(update_user)
@@ -219,6 +221,7 @@ pub async fn eventsub(
                         let mut update_user = record.clone();
                         update_user.fields.subscriber_since = None;
                         update_user.fields.subscription_tier = None;
+                        update_user.fields.display_name = user_name.to_string();
 
                         let _ = airtable
                             .update_user(update_user)
@@ -245,7 +248,10 @@ pub async fn eventsub(
         }) => {
             let username = match is_anonymous {
                 true => "Anonymous".to_string(),
-                false => user_name.unwrap_or(Nickname::from("Anonymous")).to_string(),
+                false => user_name
+                    .clone()
+                    .unwrap_or(Nickname::from("Anonymous"))
+                    .to_string(),
             };
             let tier = SubTier::from(tier);
             let total = if total > 0 { total as usize } else { 0 };
@@ -323,6 +329,9 @@ pub async fn eventsub(
                             if cumulative_total > user.fields.subgift_total.unwrap_or(0) {
                                 update_user.fields.subgift_total = Some(cumulative_total as usize);
                             }
+                        }
+                        if let Some(user_name) = user_name {
+                            update_user.fields.display_name = user_name.to_string();
                         }
 
                         let _ = airtable
