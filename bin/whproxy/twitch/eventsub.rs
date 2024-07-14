@@ -395,7 +395,7 @@ pub async fn eventsub(
                         .user_id(None)
                         .display_name(Some(username))
                         .number(number)
-                        .message(message)
+                        .message(Some(message))
                         .build();
 
                     let _ = airtable
@@ -428,7 +428,7 @@ pub async fn eventsub(
                             .user_id(user_record_id.clone())
                             .display_name(Some(username))
                             .number(number)
-                            .message(message)
+                            .message(Some(message))
                             .build();
 
                         let _ = airtable
@@ -441,7 +441,7 @@ pub async fn eventsub(
                             .user_id(Some(user.id.clone()))
                             .display_name(Some(user.fields.display_name))
                             .number(number)
-                            .message(message)
+                            .message(Some(message))
                             .build();
 
                         let _ = airtable

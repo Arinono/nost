@@ -8,7 +8,7 @@ pub struct Bits {
     pub user_id: Option<Vec<UserRecordId>>,
     pub display_name: Option<Vec<String>>,
     pub number: usize,
-    pub message: String,
+    pub message: Option<String>,
 }
 
 impl Default for Bits {
@@ -18,7 +18,7 @@ impl Default for Bits {
             user_id: None,
             display_name: None,
             number: 0,
-            message: "".to_owned(),
+            message: None,
         }
     }
 }
@@ -30,7 +30,7 @@ impl Bits {
             user_id: None,
             display_name: None,
             number: 0,
-            message: "".to_owned(),
+            message: None,
         }
     }
 
@@ -69,8 +69,10 @@ impl BitsBuilder {
         self
     }
 
-    pub fn message(mut self, message: String) -> Self {
-        self.bits.message = message;
+    pub fn message(mut self, message: Option<String>) -> Self {
+        if let Some(message) = message {
+            self.bits.message = Some(message);
+        }
         self
     }
 
