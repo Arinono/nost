@@ -2,29 +2,16 @@ use serenity::all::{Colour, CreateEmbed, ExecuteWebhook, Http, Webhook};
 
 use crate::models::misc::SubTier;
 
-#[derive(Debug, Clone)]
-struct EmbedColor(String);
-
 pub struct DiscordNotifier {
     http: Http,
-    embed_color: EmbedColor,
+    embed_color: Colour,
     pub webhook: Webhook,
-}
-
-impl Into<Colour> for EmbedColor {
-    fn into(self) -> Colour {
-        Colour::from_rgb(
-            u8::from_str_radix(&self.0[1..3], 16).unwrap(),
-            u8::from_str_radix(&self.0[3..5], 16).unwrap(),
-            u8::from_str_radix(&self.0[5..7], 16).unwrap(),
-        )
-    }
 }
 
 impl DiscordNotifier {
     pub async fn new(webhook_url: String) -> Self {
         let http = Http::new("");
-        let embed_color = EmbedColor("0xE5A266".to_string());
+        let embed_color = Colour::from_rgb(229, 162, 102);
         let webhook = Webhook::from_url(&http, &webhook_url)
             .await
             .expect("Invalid webhook URL");
