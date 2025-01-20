@@ -47,6 +47,8 @@ pub enum Base {
     Bits,
 }
 
+const CACHE_TIME: u64 = 180;
+
 impl FromStr for Base {
     type Err = String;
 
@@ -145,7 +147,7 @@ impl Airtable {
         format!("Bearer {}", self.token.secret_str())
     }
 
-    fn day_in_secs() -> Duration {
+    fn user_cache_time() -> Duration {
         Duration::from_secs(86400)
     }
 
@@ -181,7 +183,7 @@ impl Airtable {
                 None => None,
                 Some(record) => {
                     self.user_cache
-                        .insert(twitch_id.clone(), record.clone(), Self::day_in_secs())
+                        .insert(twitch_id.clone(), record.clone(), Self::user_cache_time())
                         .await;
                     Some(record.clone())
                 }
@@ -214,7 +216,7 @@ impl Airtable {
             let record: UserRecord = res.expect("Failed to parse user from Airtable");
 
             self.user_cache
-                .insert(record.id.clone(), record.clone(), Self::day_in_secs())
+                .insert(record.id.clone(), record.clone(), Self::user_cache_time())
                 .await;
             Some(record.clone())
         } else {
@@ -258,7 +260,11 @@ impl Airtable {
                 None => None,
                 Some(record) => {
                     self.user_cache
-                        .insert(cache_key.clone(), record.clone(), Duration::from_secs(30))
+                        .insert(
+                            cache_key.clone(),
+                            record.clone(),
+                            Duration::from_secs(CACHE_TIME),
+                        )
                         .await;
 
                     Some(record.fields.display_name.clone())
@@ -302,7 +308,11 @@ impl Airtable {
                 None => None,
                 Some(record) => {
                     self.user_cache
-                        .insert(cache_key.clone(), record.clone(), Duration::from_secs(30))
+                        .insert(
+                            cache_key.clone(),
+                            record.clone(),
+                            Duration::from_secs(CACHE_TIME),
+                        )
                         .await;
 
                     Some(record.fields.display_name.clone())
@@ -367,7 +377,11 @@ impl Airtable {
                             record.fields.display_name =
                                 Some(vec![user.fields.display_name.clone()]);
                             self.subgift_cache
-                                .insert(cache_key.clone(), record.clone(), Duration::from_secs(30))
+                                .insert(
+                                    cache_key.clone(),
+                                    record.clone(),
+                                    Duration::from_secs(CACHE_TIME),
+                                )
                                 .await;
 
                             Some(format!(
@@ -438,7 +452,11 @@ impl Airtable {
                             record.fields.display_name =
                                 Some(vec![user.fields.display_name.clone()]);
                             self.bits_cache
-                                .insert(cache_key.clone(), record.clone(), Duration::from_secs(30))
+                                .insert(
+                                    cache_key.clone(),
+                                    record.clone(),
+                                    Duration::from_secs(CACHE_TIME),
+                                )
                                 .await;
 
                             Some(format!(
@@ -555,7 +573,11 @@ impl Airtable {
                 let data = response.json::<UserRecords>().await?;
                 let record = data.records.first().unwrap();
                 self.user_cache
-                    .insert(user.twitch_id.clone(), record.clone(), Self::day_in_secs())
+                    .insert(
+                        user.twitch_id.clone(),
+                        record.clone(),
+                        Self::user_cache_time(),
+                    )
                     .await;
                 Ok(record.id.clone())
             }
@@ -591,7 +613,7 @@ impl Airtable {
                         .insert(
                             record.fields.twitch_id.clone(),
                             record.clone(),
-                            Self::day_in_secs(),
+                            Self::user_cache_time(),
                         )
                         .await;
                 }
@@ -664,7 +686,7 @@ impl Airtable {
                     Some(user_id) => {
                         let user_id = user_id.first().expect("User ID is empty");
                         self.subgift_cache
-                            .insert(user_id.clone(), record.clone(), Self::day_in_secs())
+                            .insert(user_id.clone(), record.clone(), Self::user_cache_time())
                             .await;
                     }
                     None => {
@@ -701,7 +723,7 @@ impl Airtable {
                     Some(user_id) => {
                         let user_id = user_id.first().expect("User ID is empty");
                         self.bits_cache
-                            .insert(user_id.clone(), record.clone(), Self::day_in_secs())
+                            .insert(user_id.clone(), record.clone(), Self::user_cache_time())
                             .await;
                     }
                     None => {

@@ -23,9 +23,10 @@ use axum::{
 use tokio::{signal, task::JoinHandle};
 use tower::{BoxError, ServiceBuilder};
 use tower_http::{catch_panic::CatchPanicLayer, cors::CorsLayer, trace::TraceLayer};
-use twitch_api::helix::{channels::get_channel_followers, HelixClient};
+use twitch_api::helix::HelixClient;
 
 const PORT: u16 = 3000;
+const CACHE_CLEAN: u64 = 60;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -87,13 +88,13 @@ async fn main() -> Result<(), eyre::Report> {
 
     let airtable_cleanup = tokio::spawn(async move {
         user_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
             .await;
         subgift_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
             .await;
         bits_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(60))
+            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
             .await;
         Ok::<(), eyre::Report>(())
     });
