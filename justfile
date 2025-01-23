@@ -10,11 +10,14 @@ dev:
 build:
   cargo build --release
 
-deploy-whproxy:
+deploy:
   fly deploy
 
-secrets-whproxy:
+secrets:
   fly secrets import < .env
 
-logs-whproxy:
+logs:
   fly logs
+
+geni direction:
+  DATABASE_URL="sqlite://./local.sqlite" geni {{ direction }}
