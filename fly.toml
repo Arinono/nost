@@ -7,7 +7,7 @@ app = 'nost-whproxy'
 primary_region = 'ams'
 
 [build]
-  dockerfile = 'Dockerfile.whproxy'
+  dockerfile = 'Dockerfile'
 
 [http_service]
   internal_port = 3000
@@ -22,6 +22,14 @@ primary_region = 'ams'
     grace_period = '5s'
     method = 'GET'
     path = '/health'
+
+[mounts]
+source = "libsql_data"
+destination = "/app/data"
+initial_size = "1GB"
+auto_extend_size_threshold = 80
+auto_extend_size_increment = "1GB"
+auto_extend_size_limit = "5GB"
 
 [[vm]]
   memory = '256mb'

@@ -4,17 +4,17 @@ ls:
 clean:
   cargo clean
 
-whproxy:
+dev:
   cargo run
 
 build:
-  cargo build --release --all-targets
+  cargo build --release
 
 deploy-whproxy:
-  fly deploy -c fly.whproxy.toml
+  fly deploy
 
 secrets-whproxy:
-  fly secrets -c fly.whproxy.toml import < .env
+  fly secrets import < .env
 
 logs-whproxy:
-  fly -c fly.whproxy.toml logs
+  fly logs

@@ -14,6 +14,9 @@ pub struct Environment {
     pub airtable_base_id: String,
     pub airtable_api_token: Secret,
     pub dev_mode: bool,
+    pub turso_local_db_path: String,
+    pub turso_db_url: String,
+    pub turso_auth_token: Secret,
 }
 
 impl Secret {
@@ -83,6 +86,9 @@ impl Environment {
         let airtable_base_id = Self::string("AIRTABLE_BASE_ID");
         let airtable_api_token = Self::secret("AIRTABLE_API_TOKEN");
         let dev_mode = Self::string("DEV_MODE") == "true";
+        let turso_db_url = Self::string("TURSO_DB_URL");
+        let turso_local_db_path = Self::string("TURSO_LOCAL_DB_PATH");
+        let turso_auth_token = Self::secret("TURSO_AUTH_TOKEN");
 
         Self {
             event_sub_secret,
@@ -96,6 +102,9 @@ impl Environment {
             airtable_base_id,
             airtable_api_token,
             dev_mode,
+            turso_db_url,
+            turso_auth_token,
+            turso_local_db_path,
         }
     }
 }

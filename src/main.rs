@@ -34,6 +34,7 @@ pub struct AppState {
     pub token: Arc<tokio::sync::RwLock<twitch_oauth2::AppAccessToken>>,
     pub client: HelixClient<'static, reqwest::Client>,
     pub retainer: Arc<retainer::Cache<String, String>>,
+    pub db: Arc<libsql::Database>,
     pub user_cache: Arc<retainer::Cache<String, models::UserRecord>>,
     pub subgift_cache: Arc<retainer::Cache<String, models::SubgiftRecord>>,
     pub bits_cache: Arc<retainer::Cache<String, models::BitsRecord>>,
@@ -68,6 +69,23 @@ async fn main() -> Result<(), eyre::Report> {
     tracing::debug!("Token: {:?}", token);
 
     let token = Arc::new(tokio::sync::RwLock::new(token));
+
+    let db = match env.dev_mode {
+        true => {
+            libsql::Builder::new_local(env.turso_db_url.clone())
+                .build()
+                .await?
+        }
+        false => {
+            libsql::Builder::new_remote_replica(
+                env.turso_local_db_path.clone(),
+                env.turso_db_url.clone(),
+                env.turso_auth_token.secret_str().to_string(),
+            )
+            .build()
+            .await?
+        }
+    };
 
     let retainer = Arc::new(retainer::Cache::<String, String>::new());
     let ret = retainer.clone();
@@ -104,6 +122,7 @@ async fn main() -> Result<(), eyre::Report> {
         token: token.clone(),
         client: client.clone(),
         retainer: retainer.clone(),
+        db: Arc::new(db),
         user_cache: user_cache.clone(),
         subgift_cache: subgift_cache.clone(),
         bits_cache: bits_cache.clone(),
