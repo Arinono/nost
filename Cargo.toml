@@ -3,10 +3,6 @@ name = "main"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "whproxy"
-path = "bin/whproxy/main.rs"
-
 [dependencies]
 anyhow = "1.0.83"
 async-trait = "0.1.80"
