@@ -1,5 +1,5 @@
 [package]
-name = "main"
+name = "nost"
 version = "0.1.0"
 edition = "2021"
 
@@ -29,9 +29,12 @@ tracing = "0.1.37"
 tracing-error = "0.2.0"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-twitch_api = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "helix", "eventsub",  "hmac"] }
-twitch_oauth2 = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "client"] }
-twitch_types = { git = "https://github.com/twitch-rs/twitch_api/" }
+twitch_api = { version = "0.7.0", features = ["reqwest", "helix", "eventsub", "hmac"] }
+twitch_oauth2 = { version = "0.15.1", features = ["reqwest", "client"] }
+twitch_types = "0.4.8"
+# twitch_api = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "helix", "eventsub",  "hmac"] }
+# twitch_oauth2 = { git = "https://github.com/twitch-rs/twitch_api/", features = ["reqwest", "client"] }
+# twitch_types = { git = "https://github.com/twitch-rs/twitch_api/" }
 url = { version = "2.5.0", features = ["serde"] }
 
 [patch.crates-io.twitch_types]

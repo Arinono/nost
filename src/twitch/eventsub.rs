@@ -10,9 +10,9 @@ use twitch_api::eventsub::{
         ChannelCheerV1Payload, ChannelFollowV2Payload, ChannelSubscribeV1Payload,
         ChannelSubscriptionEndV1Payload, ChannelSubscriptionGiftV1Payload,
     },
-    event::Event,
+    Event,
 };
-use twitch_types::{DisplayName, Nickname};
+use twitch_types::DisplayName;
 
 use crate::{
     airtable::Airtable,
@@ -250,7 +250,7 @@ pub async fn eventsub(
                 true => "Anonymous".to_string(),
                 false => user_name
                     .clone()
-                    .unwrap_or(Nickname::from("Anonymous"))
+                    .unwrap_or(DisplayName::from("Anonymous"))
                     .to_string(),
             };
             let tier = SubTier::from(tier);
