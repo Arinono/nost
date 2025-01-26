@@ -21,6 +21,7 @@ retainer = "0.3.0"
 serde = { version = "1.0.201", features = ["derive"] }
 serde_json = "1.0.117"
 serenity = { version = "0.12.2", features = ["rustls_backend", "model"] }
+tables = { path = "./crates/tables" }
 thiserror = "1.0.60"
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-util = "0.7.11"
@@ -29,7 +30,8 @@ tower-http = { version = "0.5", features = ["cors", "add-extension", "trace", "c
 tracing = "0.1.37"
 tracing-error = "0.2.0"
 tracing-log = "0.2.0"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "std"] }
+tracing-test = "0.2.5"
 twitch_api = { version = "0.7.0", features = ["reqwest", "helix", "eventsub", "hmac"] }
 twitch_oauth2 = { version = "0.15.1", features = ["reqwest", "client"] }
 twitch_types = "0.4.8"

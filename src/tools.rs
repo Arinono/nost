@@ -1,5 +1,14 @@
-pub fn install_tools() -> eyre::Result<()> {
-    install_tracing();
+use crate::env::Environment;
+
+use tracing_error::ErrorLayer;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{
+    layer::{Layer, SubscriberExt},
+    util::SubscriberInitExt,
+};
+
+pub fn install_tools(env: &Environment) -> eyre::Result<()> {
+    install_tracing(env);
     install_eyre()?;
     Ok(())
 }
@@ -15,15 +24,14 @@ fn install_eyre() -> eyre::Result<()> {
     Ok(())
 }
 
-fn install_tracing() {
-    use tracing_error::ErrorLayer;
-    use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{fmt, EnvFilter};
-
-    let fmt_layer = fmt::layer()
-        .with_file(true)
-        .with_line_number(true)
-        .with_target(true);
+fn install_tracing(env: &Environment) {
+    let format_layer = {
+        if env.dev_mode {
+            tracing_subscriber::fmt::layer().pretty().boxed()
+        } else {
+            tracing_subscriber::fmt::layer().json().boxed()
+        }
+    };
 
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("debug"))
@@ -37,7 +45,7 @@ fn install_tracing() {
 
     tracing_subscriber::registry()
         .with(filter_layer)
-        .with(fmt_layer)
+        .with(format_layer)
         .with(ErrorLayer::default())
         .init();
 }

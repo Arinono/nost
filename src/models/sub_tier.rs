@@ -28,9 +28,9 @@ impl Display for SubTier {
     }
 }
 
-impl Into<serde_json::Value> for SubTier {
-    fn into(self) -> serde_json::Value {
-        serde_json::Value::String(self.to_string())
+impl From<SubTier> for serde_json::Value {
+    fn from(val: SubTier) -> Self {
+        serde_json::Value::String(val.to_string())
     }
 }
 

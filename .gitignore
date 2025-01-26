@@ -1,3 +1,5 @@
 /target
 /result
 local.sqlite
+tests.sqlite
+test_*.sqlite

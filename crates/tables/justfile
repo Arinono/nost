@@ -1,0 +1,37 @@
+default:
+  @just --list
+
+schema := "../../migrations/schema.sql"
+
+clippy:
+  cargo clippy --fix
+
+clippy-lint:
+  cargo clippy -- -D warnings
+
+fmt:
+  cargo fmt
+
+fmt-check:
+  cargo fmt -- --check
+
+check:
+  cargo check
+
+clean:
+  cargo clean
+
+lint: check fmt clippy test
+
+test-clean:
+  (rm -f tests.sqlite ; rm -f test_*.sqlite)
+
+test: test-clean
+  sqlite3 tests.sqlite < {{ schema }}
+  cargo test && just test-clean
+
+test_log: test-clean
+  sqlite3 tests.sqlite < {{ schema }}
+  cargo test -- --nocapture && just test-clean
+
+

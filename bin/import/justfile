@@ -1,0 +1,25 @@
+default:
+  @just --list
+
+clippy:
+  cargo clippy --fix
+
+clippy-lint:
+  cargo clippy -- -D warnings
+
+fmt:
+  cargo fmt
+
+fmt-check:
+  cargo fmt -- --check
+
+check:
+  cargo check
+
+clean:
+  cargo clean
+
+lint: check fmt clippy
+
+run:
+  cargo run

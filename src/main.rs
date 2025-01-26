@@ -1,11 +1,12 @@
-mod airtable;
 mod api;
+mod database;
 mod discord;
 mod env;
 mod models;
 mod tools;
 mod twitch;
 
+use database::Database;
 use env::Environment;
 use eyre::Context;
 use tools::install_tools;
@@ -26,7 +27,6 @@ use tower_http::{catch_panic::CatchPanicLayer, cors::CorsLayer, trace::TraceLaye
 use twitch_api::helix::HelixClient;
 
 const PORT: u16 = 3000;
-const CACHE_CLEAN: u64 = 60;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,10 +34,7 @@ pub struct AppState {
     pub token: Arc<tokio::sync::RwLock<twitch_oauth2::AppAccessToken>>,
     pub client: HelixClient<'static, reqwest::Client>,
     pub retainer: Arc<retainer::Cache<String, String>>,
-    pub db: Arc<libsql::Database>,
-    pub user_cache: Arc<retainer::Cache<String, models::UserRecord>>,
-    pub subgift_cache: Arc<retainer::Cache<String, models::SubgiftRecord>>,
-    pub bits_cache: Arc<retainer::Cache<String, models::BitsRecord>>,
+    pub database: Arc<Database>,
 }
 
 #[derive(Debug)]
@@ -48,9 +45,8 @@ pub enum Error {
 
 #[tokio::main]
 async fn main() -> Result<(), eyre::Report> {
-    install_tools().expect("Failed to install tools");
-
     let env = Environment::new();
+    install_tools(&env).expect("Failed to install tools");
 
     tracing::info!("App starting with:\n{:#?}", env);
 
@@ -70,23 +66,6 @@ async fn main() -> Result<(), eyre::Report> {
 
     let token = Arc::new(tokio::sync::RwLock::new(token));
 
-    let db = match env.dev_mode {
-        true => {
-            libsql::Builder::new_local(env.turso_db_url.clone())
-                .build()
-                .await?
-        }
-        false => {
-            libsql::Builder::new_remote_replica(
-                env.turso_local_db_path.clone(),
-                env.turso_db_url.clone(),
-                env.turso_auth_token.secret_str().to_string(),
-            )
-            .build()
-            .await?
-        }
-    };
-
     let retainer = Arc::new(retainer::Cache::<String, String>::new());
     let ret = retainer.clone();
     let retainer_cleanup = tokio::spawn(async move {
@@ -95,37 +74,14 @@ async fn main() -> Result<(), eyre::Report> {
         Ok::<(), eyre::Report>(())
     });
 
-    let user_cache = Arc::new(retainer::Cache::<String, models::UserRecord>::new());
-    let user_cache_ret = user_cache.clone();
-
-    let subgift_cache = Arc::new(retainer::Cache::<String, models::SubgiftRecord>::new());
-    let subgift_cache_ret = subgift_cache.clone();
-
-    let bits_cache = Arc::new(retainer::Cache::<String, models::BitsRecord>::new());
-    let bits_cache_ret = bits_cache.clone();
-
-    let airtable_cleanup = tokio::spawn(async move {
-        user_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
-            .await;
-        subgift_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
-            .await;
-        bits_cache_ret
-            .monitor(10, 0.50, tokio::time::Duration::from_secs(CACHE_CLEAN))
-            .await;
-        Ok::<(), eyre::Report>(())
-    });
+    let db = Database::new(&env).await.unwrap();
 
     let app_state = AppState {
         env: Arc::new(env.clone()),
         token: token.clone(),
         client: client.clone(),
         retainer: retainer.clone(),
-        db: Arc::new(db),
-        user_cache: user_cache.clone(),
-        subgift_cache: subgift_cache.clone(),
-        bits_cache: bits_cache.clone(),
+        database: Arc::new(db),
     };
 
     let cors = CorsLayer::new()
@@ -199,14 +155,6 @@ async fn main() -> Result<(), eyre::Report> {
             .map_err(|e| eyre::eyre!("Server error: {:#}", e))
     });
 
-    // let twitch_broadcaster_id = env.twitch_broadcaster_id.clone();
-    // let client_clone = client.clone();
-    // let follower_cleanup = tokio::spawn(async move {
-    //     followers_monitor(twitch_user_id, twitch_token, client_clone).await;
-    //
-    //     Ok::<(), eyre::Report>(())
-    // });
-
     tokio::try_join!(
         flatten(ec_monitor),
         flatten(server),
@@ -216,8 +164,6 @@ async fn main() -> Result<(), eyre::Report> {
             token.clone()
         ))),
         flatten(retainer_cleanup),
-        flatten(airtable_cleanup),
-        // flatten(follower_cleanup)
     )?;
 
     Ok(())

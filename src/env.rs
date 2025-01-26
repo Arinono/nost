@@ -65,7 +65,7 @@ impl Environment {
 
     fn string(key: &str) -> String {
         let full_key = format!("{}{}", Self::PREFIX, key);
-        std::env::var(&full_key).expect(&format!("{} is required", full_key))
+        std::env::var(&full_key).unwrap_or_else(|_| panic!("{} is required", full_key))
     }
 
     fn secret(key: &str) -> Secret {

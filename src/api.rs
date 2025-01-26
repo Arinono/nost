@@ -1,64 +1,61 @@
 use axum::{extract::State, response::IntoResponse};
 use http::StatusCode;
+use tables::latests::Latests;
 
-use crate::{airtable::Airtable, AppState};
+use crate::AppState;
 
 pub async fn latest_follow(State(state): State<AppState>) -> impl IntoResponse {
-    let airtable_client = Airtable::new(
-        state.env.airtable_api_token.clone(),
-        state.env.airtable_base_id.clone(),
-        state.user_cache.clone(),
-        state.subgift_cache.clone(),
-        state.bits_cache.clone(),
-    );
+    let db = state.database.clone();
+    let conn = db.conn().unwrap();
 
-    match airtable_client.get_most_recent_follow().await {
-        Some(follow) => (StatusCode::OK, follow),
+    let follower = Latests::get_latest_follower(&conn)
+        .await
+        .expect("Failed to get latest follower");
+
+    match follower {
+        Some(follow) => (StatusCode::OK, follow.name),
         None => (StatusCode::NOT_FOUND, "No follow found".to_owned()),
     }
 }
 
 pub async fn latest_subscriber(State(state): State<AppState>) -> impl IntoResponse {
-    let airtable_client = Airtable::new(
-        state.env.airtable_api_token.clone(),
-        state.env.airtable_base_id.clone(),
-        state.user_cache.clone(),
-        state.subgift_cache.clone(),
-        state.bits_cache.clone(),
-    );
+    let db = state.database.clone();
+    let conn = db.conn().unwrap();
 
-    match airtable_client.get_most_recent_subscriber().await {
-        Some(sub) => (StatusCode::OK, sub),
+    let subscriber = Latests::get_latest_subscriber(&conn)
+        .await
+        .expect("Failed to get latest subscriber");
+
+    match subscriber {
+        Some(sub) => (StatusCode::OK, sub.name),
         None => (StatusCode::NOT_FOUND, "No subscriber found".to_owned()),
     }
 }
 
 pub async fn latest_subgift(State(state): State<AppState>) -> impl IntoResponse {
-    let airtable_client = Airtable::new(
-        state.env.airtable_api_token.clone(),
-        state.env.airtable_base_id.clone(),
-        state.user_cache.clone(),
-        state.subgift_cache.clone(),
-        state.bits_cache.clone(),
-    );
+    let db = state.database.clone();
+    let conn = db.conn().unwrap();
 
-    match airtable_client.get_most_recent_subgift().await {
-        Some(subgift) => (StatusCode::OK, subgift),
+    let subgift = Latests::get_latest_subgift(&conn)
+        .await
+        .expect("Failed to get latest subgift");
+
+    match subgift {
+        Some(subgift) => (StatusCode::OK, subgift.name),
         None => (StatusCode::NOT_FOUND, "No subgift found".to_owned()),
     }
 }
 
 pub async fn latest_bits(State(state): State<AppState>) -> impl IntoResponse {
-    let airtable_client = Airtable::new(
-        state.env.airtable_api_token.clone(),
-        state.env.airtable_base_id.clone(),
-        state.user_cache.clone(),
-        state.subgift_cache.clone(),
-        state.bits_cache.clone(),
-    );
+    let db = state.database.clone();
+    let conn = db.conn().unwrap();
 
-    match airtable_client.get_most_recent_bits().await {
-        Some(bits) => (StatusCode::OK, bits),
+    let bits = Latests::get_latest_bit(&conn)
+        .await
+        .expect("Failed to get latest bit");
+
+    match bits {
+        Some(bits) => (StatusCode::OK, bits.name),
         None => (StatusCode::NOT_FOUND, "No subgift found".to_owned()),
     }
 }

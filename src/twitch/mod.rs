@@ -85,8 +85,8 @@ pub async fn eventsub_register(
 
         drop(subs);
 
-        if !follower_exists {
-            if follower::create_subscription(
+        if !follower_exists
+            && follower::create_subscription(
                 &state.env.twitch_broadcaster_id,
                 &state.env.twitch_moderator_id,
                 &token,
@@ -95,15 +95,14 @@ pub async fn eventsub_register(
             )
             .await
             .is_err()
-            {
-                continue;
-            }
+        {
+            continue;
         }
 
         // can't register these events locally
         if !state.env.dev_mode {
-            if !subscribe_exists {
-                if subscriber::subscribe::create_subscription(
+            if !subscribe_exists
+                && subscriber::subscribe::create_subscription(
                     &state.env.twitch_broadcaster_id,
                     &token,
                     &helix,
@@ -111,13 +110,12 @@ pub async fn eventsub_register(
                 )
                 .await
                 .is_err()
-                {
-                    continue;
-                }
+            {
+                continue;
             }
 
-            if !subscribe_end_exists {
-                if subscriber::subscribe_end::create_subscription(
+            if !subscribe_end_exists
+                && subscriber::subscribe_end::create_subscription(
                     &state.env.twitch_broadcaster_id,
                     &token,
                     &helix,
@@ -125,13 +123,12 @@ pub async fn eventsub_register(
                 )
                 .await
                 .is_err()
-                {
-                    continue;
-                }
+            {
+                continue;
             }
 
-            if !subgift_exists {
-                if subgift::create_subscription(
+            if !subgift_exists
+                && subgift::create_subscription(
                     &state.env.twitch_broadcaster_id,
                     &token,
                     &helix,
@@ -139,13 +136,12 @@ pub async fn eventsub_register(
                 )
                 .await
                 .is_err()
-                {
-                    continue;
-                }
+            {
+                continue;
             }
 
-            if !bits_exists {
-                if bits::create_subscription(
+            if !bits_exists
+                && bits::create_subscription(
                     &state.env.twitch_broadcaster_id,
                     &token,
                     &helix,
@@ -153,9 +149,8 @@ pub async fn eventsub_register(
                 )
                 .await
                 .is_err()
-                {
-                    continue;
-                }
+            {
+                continue;
             }
         }
     }

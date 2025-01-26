@@ -70,10 +70,7 @@ pub async fn callback(
     tracing::info!(code = code, state = state, "Callback hit");
 
     let saved_state = app_state.retainer.remove(&state).await;
-    tracing::info!(
-        found_state = if saved_state.is_some() { true } else { false },
-        "Retrieved state"
-    );
+    tracing::info!(found_state = saved_state.is_some(), "Retrieved state");
 
     if saved_state.is_none() {
         return Err(Error::AppError(anyhow::anyhow!("Callback state invalid")));
@@ -84,7 +81,7 @@ pub async fn callback(
         ("client_id", &app_state.env.twitch_client_id),
         (
             "client_secret",
-            &app_state.env.twitch_client_secret.secret_str(),
+            app_state.env.twitch_client_secret.secret_str(),
         ),
         ("code", &code),
         ("grant_type", "authorization_code"),

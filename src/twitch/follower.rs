@@ -23,7 +23,7 @@ pub fn subscription_exists<'a>(
                 .get("broadcaster_user_id")
                 .expect("channel.follow does not contain broadcaster_user_id")
                 .as_str()
-                == Some(&broadcaster_id)
+                == Some(broadcaster_id)
     }
 }
 

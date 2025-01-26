@@ -1,6 +1,6 @@
 use serenity::all::{Colour, CreateEmbed, ExecuteWebhook, Http, Webhook};
 
-use crate::models::misc::SubTier;
+use crate::models::sub_tier::SubTier;
 
 pub struct DiscordNotifier {
     http: Http,
@@ -27,7 +27,7 @@ impl DiscordNotifier {
         let builder = ExecuteWebhook::new().embed(
             CreateEmbed::default()
                 .title("New Follower")
-                .color(self.embed_color.clone())
+                .color(self.embed_color)
                 .field("Username", username, true),
         );
 
@@ -38,19 +38,16 @@ impl DiscordNotifier {
     }
 
     pub async fn new_subscriber(&self, username: &String, tier: &SubTier) {
-        let builder = ExecuteWebhook::new().embed(
-            CreateEmbed::default()
-                .color(self.embed_color.clone())
-                .field(
-                    "New Subscriber",
-                    format!(
-                        "{} has subscribed to the channel with a {} sub!",
-                        username,
-                        tier.to_string().to_lowercase()
-                    ),
-                    false,
+        let builder =
+            ExecuteWebhook::new().embed(CreateEmbed::default().color(self.embed_color).field(
+                "New Subscriber",
+                format!(
+                    "{} has subscribed to the channel with a {} sub!",
+                    username,
+                    tier.to_string().to_lowercase()
                 ),
-        );
+                false,
+            ));
 
         self.webhook
             .execute(&self.http, false, builder)
@@ -62,7 +59,7 @@ impl DiscordNotifier {
         let builder = ExecuteWebhook::new().embed(
             CreateEmbed::default()
                 .title("New Sub Gift")
-                .color(self.embed_color.clone())
+                .color(self.embed_color)
                 .field("Username", username, true)
                 .field("Total", total.to_string(), true)
                 .field("Tier", tier.to_string().to_lowercase(), true),
@@ -78,7 +75,7 @@ impl DiscordNotifier {
         let builder = ExecuteWebhook::new().embed(
             CreateEmbed::default()
                 .title("New Bits")
-                .color(self.embed_color.clone())
+                .color(self.embed_color)
                 .field("Username", username, true)
                 .field("Bits", bits.to_string(), true)
                 .field("Message", message, false),

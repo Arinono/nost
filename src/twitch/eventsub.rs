@@ -15,11 +15,11 @@ use twitch_api::eventsub::{
 use twitch_types::DisplayName;
 
 use crate::{
-    airtable::Airtable,
     discord::DiscordNotifier,
-    models::{self, misc::SubTier, subgift::Subgift, user::User},
+    models::{self, sub_tier::SubTier},
     AppState,
 };
+use tables::{Orm, OrmBase, TwitchId};
 
 const TWI_MSG_ID: &str = "Twitch-Eventsub-Message-Id";
 
@@ -90,13 +90,6 @@ pub async fn eventsub(
 
     let discord =
         DiscordNotifier::new(app_state.env.discord_webhook_url.secret_str().to_owned()).await;
-    let airtable = Airtable::new(
-        app_state.env.airtable_api_token.clone(),
-        app_state.env.airtable_base_id.clone(),
-        app_state.user_cache.clone(),
-        app_state.subgift_cache.clone(),
-        app_state.bits_cache.clone(),
-    );
 
     match event {
         Event::ChannelFollowV2(P {
@@ -108,32 +101,39 @@ pub async fn eventsub(
         }) => {
             tracing::info!("got follow event from {} ({})", user_name, user_id);
 
+            let database = app_state.database.clone();
             tokio::spawn(async move {
                 discord.new_follower(&user_name.to_string()).await;
-                let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
+                let db = database.db().unwrap();
+                let conn = database.conn().unwrap();
 
-                match record {
+                let twitch_id: TwitchId = user_id.into();
+                let user = tables::user::User::get_by_twitch_id(&conn, twitch_id.0)
+                    .await
+                    .expect("Failure to retrieve user");
+
+                match user {
                     None => {
-                        let new_user = User::builder()
-                            .twitch_id(user_id.to_string())
-                            .display_name(user_name.to_string())
-                            .followed_at(Utc::now())
-                            .build();
+                        let new_user =
+                            tables::user::User::builder(user_name.to_string(), twitch_id.0)
+                                .follow(Orm::<()>::now_utc())
+                                .build();
 
-                        let _ = airtable
-                            .create_user(new_user)
-                            .await
-                            .expect("Failed to create user");
+                        new_user.create(&conn).await.expect("Failed to create user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
-                    Some(record) => {
-                        let mut update_record = record.clone();
-                        update_record.fields.follower_since = Some(Utc::now().to_rfc3339());
-                        update_record.fields.display_name = user_name.to_string();
+                    Some(mut user) => {
+                        user.follower_since = Some(Utc::now().to_rfc3339());
+                        user.display_name = user_name.to_string();
 
-                        let _ = airtable
-                            .update_user(update_record)
-                            .await
-                            .expect("Failed to update user");
+                        user.update(&conn).await.expect("Failed to update user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                 }
             });
@@ -150,7 +150,7 @@ pub async fn eventsub(
                 }),
             ..
         }) => {
-            let tier = models::misc::SubTier::from(tier);
+            let tier = models::sub_tier::SubTier::from(tier);
             tracing::info!(
                 "got sub event from {} ({}) tier {}",
                 user_name,
@@ -158,34 +158,41 @@ pub async fn eventsub(
                 tier,
             );
 
+            let database = app_state.database.clone();
             tokio::spawn(async move {
                 discord.new_subscriber(&user_name.to_string(), &tier).await;
-                let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
+                let db = database.db().unwrap();
+                let conn = database.conn().unwrap();
 
-                match record {
+                let twitch_id: TwitchId = user_id.into();
+                let user = tables::user::User::get_by_twitch_id(&conn, twitch_id.0)
+                    .await
+                    .expect("Failure to retrieve user");
+
+                match user {
                     None => {
-                        let new_user = User::builder()
-                            .twitch_id(user_id.to_string())
-                            .display_name(user_name.to_string())
-                            .subscribed_at(Utc::now())
-                            .subscription_tier(tier)
-                            .build();
+                        let new_user =
+                            tables::user::User::builder(user_name.to_string(), twitch_id.0)
+                                .subscribe(Orm::<()>::now_utc())
+                                .tier(tier.to_string())
+                                .build();
 
-                        let _ = airtable
-                            .create_user(new_user)
-                            .await
-                            .expect("Failed to create user");
+                        new_user.create(&conn).await.expect("Failed to create user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
-                    Some(record) => {
-                        let mut update_user = record.clone();
-                        update_user.fields.subscriber_since = Some(Utc::now().to_rfc3339());
-                        update_user.fields.subscription_tier = Some(tier);
-                        update_user.fields.display_name = user_name.to_string();
+                    Some(mut user) => {
+                        user.subscriber_since = Some(Orm::<()>::now_utc());
+                        user.subscription_tier = Some(tier.to_string());
+                        user.display_name = user_name.to_string();
 
-                        let _ = airtable
-                            .update_user(update_user)
-                            .await
-                            .expect("Failed to update user");
+                        user.update(&conn).await.expect("Failed to update user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                 }
             });
@@ -201,32 +208,38 @@ pub async fn eventsub(
         }) => {
             tracing::info!("got sub end event from {} ({})", user_name, user_id);
 
+            let database = app_state.database.clone();
             tokio::spawn(async move {
-                let record = airtable.get_user_by_twitch_id(user_id.to_string()).await;
+                let db = database.db().unwrap();
+                let conn = database.conn().unwrap();
 
-                match record {
+                let twitch_id: TwitchId = user_id.into();
+                let user = tables::user::User::get_by_twitch_id(&conn, twitch_id.0)
+                    .await
+                    .expect("Failure to retrieve user");
+
+                match user {
                     None => {
                         tracing::warn!("got sub end event for unknown user");
-                        let new_user = User::builder()
-                            .twitch_id(user_id.to_string())
-                            .display_name(user_name.to_string())
-                            .build();
+                        let new_user =
+                            tables::user::User::builder(user_name.to_string(), twitch_id.0).build();
 
-                        let _ = airtable
-                            .create_user(new_user)
-                            .await
-                            .expect("Failed to create user");
+                        new_user.create(&conn).await.expect("Failed to create user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
-                    Some(record) => {
-                        let mut update_user = record.clone();
-                        update_user.fields.subscriber_since = None;
-                        update_user.fields.subscription_tier = None;
-                        update_user.fields.display_name = user_name.to_string();
+                    Some(mut user) => {
+                        user.subscriber_since = None;
+                        user.subscription_tier = None;
+                        user.display_name = user_name.to_string();
 
-                        let _ = airtable
-                            .update_user(update_user)
-                            .await
-                            .expect("Failed to update user");
+                        user.update(&conn).await.expect("Failed to update user");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                 }
             });
@@ -266,90 +279,86 @@ pub async fn eventsub(
             );
             discord.subgift(&username, total, &tier).await;
 
+            let database = app_state.database.clone();
             tokio::spawn(async move {
-                let user = match &twitch_id {
-                    Some(id) => airtable.get_user_by_twitch_id(id.to_string()).await,
+                let db = database.db().unwrap();
+                let conn = database.conn().unwrap();
+
+                let user = match twitch_id.clone() {
+                    Some(id) => {
+                        let twitch_id: TwitchId = id.into();
+                        tables::user::User::get_by_twitch_id(&conn, twitch_id.0)
+                            .await
+                            .expect("Failure to retrieve user")
+                    }
                     None => None,
                 };
 
                 if is_anonymous {
-                    let subgift = Subgift::builder()
-                        .user_id(None)
-                        .display_name(Some(username))
-                        .number(total)
-                        .tier(tier)
-                        .build();
+                    let subgift =
+                        tables::subgifts::Subgift::from_anonymous(total as u16, tier.to_string());
 
-                    let _ = airtable
-                        .create_subgift(subgift)
+                    subgift
+                        .create(&conn)
                         .await
                         .expect("Failed to create subgift");
+
+                    if !app_state.env.dev_mode {
+                        db.sync().await.expect("Failed to sync replica");
+                    }
 
                     return;
                 }
 
                 match user {
                     None => {
-                        let twitch_id_s = match twitch_id {
-                            Some(id) => id.to_string(),
-                            None => "".to_string(),
-                        };
-                        let mut new_user_b = User::builder()
-                            .twitch_id(twitch_id_s)
-                            .display_name(username.clone());
+                        let twitch_id: TwitchId = twitch_id
+                            .clone()
+                            .expect("a twitch_id for non anonymous user")
+                            .into();
+                        let new_user = tables::user::User::from(username, twitch_id.0);
+                        let user_id = new_user.create(&conn).await.expect("Failed to create user");
 
-                        if let Some(cumulative_total) = cumulative_total {
-                            new_user_b = new_user_b.subgift_total(cumulative_total as usize);
-                        }
-
-                        let new_user = new_user_b.build();
-
-                        let user_record_id = Some(
-                            airtable
-                                .create_user(new_user)
-                                .await
-                                .expect("Failed to create user"),
+                        let subgift = tables::subgifts::Subgift::from(
+                            user_id,
+                            total as u16,
+                            tier.to_string(),
                         );
 
-                        let subgift = Subgift::builder()
-                            .user_id(user_record_id.clone())
-                            .display_name(Some(username))
-                            .number(total)
-                            .tier(tier)
-                            .build();
-
-                        let _ = airtable
-                            .create_subgift(subgift)
+                        subgift
+                            .create(&conn)
                             .await
                             .expect("Failed to create subgift");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                     Some(user) => {
                         let mut update_user = user.clone();
-                        if let Some(cumulative_total) = cumulative_total {
-                            if cumulative_total > user.fields.subgift_total.unwrap_or(0) {
-                                update_user.fields.subgift_total = Some(cumulative_total as usize);
-                            }
-                        }
                         if let Some(user_name) = user_name {
-                            update_user.fields.display_name = user_name.to_string();
+                            update_user.display_name = user_name.to_string();
                         }
 
-                        let _ = airtable
-                            .update_user(update_user)
+                        update_user
+                            .update(&conn)
                             .await
                             .expect("Failed to update user");
 
-                        let subgift = Subgift::builder()
-                            .user_id(Some(user.id.clone()))
-                            .display_name(Some(user.fields.display_name))
-                            .number(total)
-                            .tier(tier)
-                            .build();
+                        let subgift = tables::subgifts::Subgift::from(
+                            user.id,
+                            total as u16,
+                            tier.to_string(),
+                        );
 
-                        let _ = airtable
-                            .create_subgift(subgift)
+                        subgift
+                            .create(&conn)
                             .await
                             .expect("Failed to create subgift");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                 }
             });
@@ -384,70 +393,61 @@ pub async fn eventsub(
             );
             discord.bits(&username, number, &message).await;
 
+            let database = app_state.database.clone();
             tokio::spawn(async move {
-                let user = match &twitch_id {
-                    Some(id) => airtable.get_user_by_twitch_id(id.to_string()).await,
+                let db = database.db().unwrap();
+                let conn = database.conn().unwrap();
+
+                let user = match twitch_id.clone() {
+                    Some(id) => {
+                        let twitch_id: TwitchId = id.into();
+                        tables::user::User::get_by_twitch_id(&conn, twitch_id.0)
+                            .await
+                            .expect("Failure to retrieve user")
+                    }
                     None => None,
                 };
 
                 if is_anonymous {
-                    let bits = models::bits::Bits::builder()
-                        .user_id(None)
-                        .display_name(Some(username))
-                        .number(number)
-                        .message(Some(message))
-                        .build();
+                    let bits = tables::bits::Bit::from_anonymous(number as u32, Some(message));
 
-                    let _ = airtable
-                        .create_bits(bits)
-                        .await
-                        .expect("Failed to create bits");
+                    bits.create(&conn).await.expect("Failed to create bits");
+
+                    if !app_state.env.dev_mode {
+                        db.sync().await.expect("Failed to sync replica");
+                    }
 
                     return;
                 }
 
                 match user {
                     None => {
-                        let twitch_id_s = match twitch_id {
-                            Some(id) => id.to_string(),
-                            None => "".to_string(),
-                        };
-                        let new_user = User::builder()
-                            .twitch_id(twitch_id_s)
-                            .display_name(username.clone())
-                            .build();
+                        let twitch_id: TwitchId = twitch_id
+                            .clone()
+                            .expect("a twitch_id for non anonymous user")
+                            .into();
+                        let new_user = tables::user::User::from(username, twitch_id.0);
 
-                        let user_record_id = Some(
-                            airtable
-                                .create_user(new_user)
-                                .await
-                                .expect("Failed to create user"),
-                        );
+                        let new_user_id =
+                            new_user.create(&conn).await.expect("Failed to create user");
 
-                        let bits = models::bits::Bits::builder()
-                            .user_id(user_record_id.clone())
-                            .display_name(Some(username))
-                            .number(number)
-                            .message(Some(message))
-                            .build();
+                        let bits =
+                            tables::bits::Bit::from(new_user_id, number as u32, Some(message));
 
-                        let _ = airtable
-                            .create_bits(bits)
-                            .await
-                            .expect("Failed to create bits");
+                        bits.create(&conn).await.expect("Failed to create bits");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                     Some(user) => {
-                        let bits = models::bits::Bits::builder()
-                            .user_id(Some(user.id.clone()))
-                            .display_name(Some(user.fields.display_name))
-                            .number(number)
-                            .message(Some(message))
-                            .build();
+                        let bits = tables::bits::Bit::from(user.id, number as u32, Some(message));
 
-                        let _ = airtable
-                            .create_bits(bits)
-                            .await
-                            .expect("Failed to create bits");
+                        bits.create(&conn).await.expect("Failed to create bits");
+
+                        if !app_state.env.dev_mode {
+                            db.sync().await.expect("Failed to sync replica");
+                        }
                     }
                 }
             });

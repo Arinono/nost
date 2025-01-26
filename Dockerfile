@@ -16,7 +16,7 @@ WORKDIR /app
 
 COPY --from=builder /usr/src/app/target/release/nost /app/bin
 
-RUN apt-get update && apt install -y openssl ca-certificates curl
+RUN apt-get update && apt install -y openssl ca-certificates curl && update-ca-certificates
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
