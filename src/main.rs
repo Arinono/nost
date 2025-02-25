@@ -2,6 +2,7 @@ mod api;
 mod database;
 mod discord;
 mod env;
+mod middleware;
 mod models;
 mod tools;
 mod twitch;
@@ -9,6 +10,7 @@ mod twitch;
 use database::Database;
 use env::Environment;
 use eyre::Context;
+use middleware::{auth_middleware, rate_limit_middleware, RateLimiter};
 use tools::install_tools;
 use twitch_oauth2::Scope;
 
@@ -17,6 +19,7 @@ use std::{net::SocketAddr, process::exit, sync::Arc, time::Duration};
 use axum::{
     error_handling::HandleErrorLayer,
     http::{header, HeaderValue, Method, StatusCode},
+    middleware as axum_middleware,
     response::{Html, IntoResponse},
     routing::{get, post},
     Extension, Router,
@@ -84,11 +87,28 @@ async fn main() -> Result<(), eyre::Report> {
         database: Arc::new(db),
     };
 
+    // Create rate limiter with 60 requests per minute
+    let rate_limiter = Arc::new(RateLimiter::new(60, 60));
+
+    // Start a background task to clean up the rate limiter
+    let rate_limiter_clone = rate_limiter.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            rate_limiter_clone.cleanup();
+        }
+    });
+
     let cors = CorsLayer::new()
         // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_origin("*".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::POST, Method::OPTIONS])
-        .allow_headers(vec![header::CONTENT_TYPE, header::ACCEPT]);
+        .allow_methods([Method::POST, Method::OPTIONS, Method::GET])
+        .allow_headers(vec![
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::AUTHORIZATION,
+        ]);
 
     let error_handler = ServiceBuilder::new()
         .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -115,6 +135,22 @@ async fn main() -> Result<(), eyre::Report> {
         )
         .layer(CatchPanicLayer::new());
 
+    // Create an API router with authentication and rate limiting
+    let api_routes = Router::new()
+        .route("/user/latest_follow", get(api::latest_follow))
+        .route("/user/latest_subscriber", get(api::latest_subscriber))
+        .route("/user/latest_subgift", get(api::latest_subgift))
+        .route("/user/latest_bits", get(api::latest_bits))
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            auth_middleware,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            rate_limiter,
+            rate_limit_middleware,
+        ))
+        .with_state(app_state.clone());
+
     // build our application with a route
     let app = Router::new()
         // install app
@@ -123,10 +159,7 @@ async fn main() -> Result<(), eyre::Report> {
         // eventsub
         .route("/twitch/eventsub", post(twitch::eventsub::eventsub))
         // api
-        .route("/api/user/latest_follow", get(api::latest_follow))
-        .route("/api/user/latest_subscriber", get(api::latest_subscriber))
-        .route("/api/user/latest_subgift", get(api::latest_subgift))
-        .route("/api/user/latest_bits", get(api::latest_bits))
+        .nest("/api", api_routes)
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))

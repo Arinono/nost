@@ -17,6 +17,7 @@ pub struct Environment {
     pub turso_local_db_path: String,
     pub turso_db_url: String,
     pub turso_auth_token: Secret,
+    pub api_token: Secret,
 }
 
 impl Secret {
@@ -89,6 +90,7 @@ impl Environment {
         let turso_db_url = Self::string("TURSO_DB_URL");
         let turso_local_db_path = Self::string("TURSO_LOCAL_DB_PATH");
         let turso_auth_token = Self::secret("TURSO_AUTH_TOKEN");
+        let api_token = Self::secret("API_TOKEN");
 
         Self {
             event_sub_secret,
@@ -105,6 +107,7 @@ impl Environment {
             turso_db_url,
             turso_auth_token,
             turso_local_db_path,
+            api_token,
         }
     }
 }
