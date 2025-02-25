@@ -1,14 +1,18 @@
 mod api;
 mod database;
+mod ddos;
 mod discord;
 mod env;
+mod middleware;
 mod models;
 mod tools;
 mod twitch;
 
 use database::Database;
+use ddos::middleware::DdosProtectionState;
 use env::Environment;
 use eyre::Context;
+use middleware::{auth_middleware, rate_limit_middleware, RateLimiter};
 use tools::install_tools;
 use twitch_oauth2::Scope;
 
@@ -17,6 +21,7 @@ use std::{net::SocketAddr, process::exit, sync::Arc, time::Duration};
 use axum::{
     error_handling::HandleErrorLayer,
     http::{header, HeaderValue, Method, StatusCode},
+    middleware as axum_middleware,
     response::{Html, IntoResponse},
     routing::{get, post},
     Extension, Router,
@@ -84,11 +89,32 @@ async fn main() -> Result<(), eyre::Report> {
         database: Arc::new(db),
     };
 
+    // Create rate limiter with 60 requests per minute
+    let rate_limiter = Arc::new(RateLimiter::new(15, 60));
+
+    // Start a background task to clean up the rate limiter
+    let rate_limiter_clone = rate_limiter.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            rate_limiter_clone.cleanup();
+        }
+    });
+
+    // Initialize DDoS protection
+    let ddos_protection = DdosProtectionState::new();
+    let ddos_task = ddos_protection.start_background_tasks();
+
     let cors = CorsLayer::new()
         // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_origin("*".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::POST, Method::OPTIONS])
-        .allow_headers(vec![header::CONTENT_TYPE, header::ACCEPT]);
+        .allow_methods([Method::POST, Method::OPTIONS, Method::GET])
+        .allow_headers(vec![
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::AUTHORIZATION,
+        ]);
 
     let error_handler = ServiceBuilder::new()
         .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -115,6 +141,27 @@ async fn main() -> Result<(), eyre::Report> {
         )
         .layer(CatchPanicLayer::new());
 
+    // Create an API router with authentication and rate limiting
+    let api_routes = Router::new()
+        .route("/user/latest_follow", get(api::latest_follow))
+        .route("/user/latest_subscriber", get(api::latest_subscriber))
+        .route("/user/latest_subgift", get(api::latest_subgift))
+        .route("/user/latest_bits", get(api::latest_bits))
+        // Apply our middleware chain: DDoS protection → Authentication → Rate limiting
+        .layer(axum_middleware::from_fn_with_state(
+            ddos_protection.clone(),
+            ddos::ddos_protection_middleware,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            auth_middleware,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            rate_limiter,
+            rate_limit_middleware,
+        ))
+        .with_state(app_state.clone());
+
     // build our application with a route
     let app = Router::new()
         // install app
@@ -123,13 +170,15 @@ async fn main() -> Result<(), eyre::Report> {
         // eventsub
         .route("/twitch/eventsub", post(twitch::eventsub::eventsub))
         // api
-        .route("/api/user/latest_follow", get(api::latest_follow))
-        .route("/api/user/latest_subscriber", get(api::latest_subscriber))
-        .route("/api/user/latest_subgift", get(api::latest_subgift))
-        .route("/api/user/latest_bits", get(api::latest_bits))
+        .nest("/api", api_routes)
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))
+        // Apply DoS protection to all routes
+        .layer(axum_middleware::from_fn_with_state(
+            ddos_protection,
+            ddos::ddos_protection_middleware,
+        ))
         .layer(cors)
         .layer(error_handler)
         .layer(tower_extensions)
@@ -149,10 +198,13 @@ async fn main() -> Result<(), eyre::Report> {
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let server = tokio::spawn(async move {
-        axum::serve(listener, app.into_make_service())
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .map_err(|e| eyre::eyre!("Server error: {:#}", e))
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| eyre::eyre!("Server error: {:#}", e))
     });
 
     tokio::try_join!(
@@ -164,6 +216,12 @@ async fn main() -> Result<(), eyre::Report> {
             token.clone()
         ))),
         flatten(retainer_cleanup),
+        flatten(tokio::spawn(async move {
+            if let Err(e) = ddos_task.await {
+                tracing::error!("DDoS protection task error: {:?}", e);
+            }
+            Ok::<(), eyre::Report>(())
+        })),
     )?;
 
     Ok(())
