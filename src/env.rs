@@ -11,8 +11,6 @@ pub struct Environment {
     pub twitch_eventsub_callback_url: String,
     pub twitch_user_oauth_callback_url: String,
     pub discord_webhook_url: Secret,
-    pub airtable_base_id: String,
-    pub airtable_api_token: Secret,
     pub dev_mode: bool,
     pub turso_local_db_path: String,
     pub turso_db_url: String,
@@ -84,8 +82,6 @@ impl Environment {
         let twitch_eventsub_callback_url = Self::string("TWITCH_EVENTSUB_CALLBACK_URL");
         let twitch_user_oauth_callback_url = Self::string("TWITCH_USER_OAUTH_CALLBACK_URL");
         let discord_webhook_url = Self::secret("DISCORD_WEBHOOK_URL");
-        let airtable_base_id = Self::string("AIRTABLE_BASE_ID");
-        let airtable_api_token = Self::secret("AIRTABLE_API_TOKEN");
         let dev_mode = Self::string("DEV_MODE") == "true";
         let turso_db_url = Self::string("TURSO_DB_URL");
         let turso_local_db_path = Self::string("TURSO_LOCAL_DB_PATH");
@@ -101,8 +97,6 @@ impl Environment {
             twitch_eventsub_callback_url,
             twitch_user_oauth_callback_url,
             discord_webhook_url,
-            airtable_base_id,
-            airtable_api_token,
             dev_mode,
             turso_db_url,
             turso_auth_token,

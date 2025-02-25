@@ -7,7 +7,7 @@ use std::{
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::{HeaderValue, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -24,6 +24,13 @@ pub struct RateLimiter {
     window: Duration,
 }
 
+pub struct RateLimitInfo {
+    pub limit: u32,
+    pub remaining: u32,
+    pub reset: u64,    // Seconds until rate limit resets
+    pub limited: bool, // Whether the request is rate limited
+}
+
 impl RateLimiter {
     pub fn new(max_requests: u32, window_seconds: u64) -> Self {
         Self {
@@ -33,8 +40,8 @@ impl RateLimiter {
         }
     }
 
-    // Check if a request should be rate limited
-    pub fn check_rate_limit(&self, ip: &str) -> bool {
+    // Check if a request should be rate limited and return rate limit info
+    pub fn check_rate_limit(&self, ip: &str) -> RateLimitInfo {
         let mut requests = self.requests.lock().unwrap();
         let now = Instant::now();
 
@@ -44,22 +51,52 @@ impl RateLimiter {
             if now.duration_since(*time) > self.window {
                 *count = 1;
                 *time = now;
-                return false;
+
+                return RateLimitInfo {
+                    limit: self.max_requests,
+                    remaining: self.max_requests - 1,
+                    reset: self.window.as_secs(),
+                    limited: false,
+                };
             }
+
+            // Calculate time until reset
+            let elapsed = now.duration_since(*time);
+            let reset_in = if elapsed >= self.window {
+                0
+            } else {
+                self.window.as_secs() - elapsed.as_secs()
+            };
 
             // If within window but over limit, reject
             if *count >= self.max_requests {
-                return true;
+                return RateLimitInfo {
+                    limit: self.max_requests,
+                    remaining: 0,
+                    reset: reset_in,
+                    limited: true,
+                };
             }
 
             // Within window and under limit, increment and accept
             *count += 1;
-            *time = now;
-            false
+
+            return RateLimitInfo {
+                limit: self.max_requests,
+                remaining: self.max_requests - *count,
+                reset: reset_in,
+                limited: false,
+            };
         } else {
             // First request from this IP
             requests.insert(ip.to_string(), (1, now));
-            false
+
+            return RateLimitInfo {
+                limit: self.max_requests,
+                remaining: self.max_requests - 1,
+                reset: self.window.as_secs(),
+                limited: false,
+            };
         }
     }
 
@@ -121,12 +158,46 @@ pub async fn rate_limit_middleware(
         .trim()
         .to_string();
 
-    // Check rate limit
-    if rate_limiter.check_rate_limit(&ip) {
-        // Rate limit exceeded
-        return (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded").into_response();
+    // Check rate limit and get rate limit info
+    let rate_limit_info = rate_limiter.check_rate_limit(&ip);
+
+    // If rate limited, return 429 with headers
+    if rate_limit_info.limited {
+        // Create a response with rate limit headers
+        let mut response = (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded").into_response();
+
+        // Add rate limit headers
+        let headers = response.headers_mut();
+        headers.insert(
+            "X-RateLimit-Limit",
+            HeaderValue::from(rate_limit_info.limit),
+        );
+        headers.insert("X-RateLimit-Remaining", HeaderValue::from(0));
+        headers.insert(
+            "X-RateLimit-Reset",
+            HeaderValue::from(rate_limit_info.reset),
+        );
+
+        return response;
     }
 
     // Proceed with the request
-    next.run(req).await
+    let mut response = next.run(req).await;
+
+    // Add rate limit headers to the successful response
+    let headers = response.headers_mut();
+    headers.insert(
+        "X-RateLimit-Limit",
+        HeaderValue::from(rate_limit_info.limit),
+    );
+    headers.insert(
+        "X-RateLimit-Remaining",
+        HeaderValue::from(rate_limit_info.remaining),
+    );
+    headers.insert(
+        "X-RateLimit-Reset",
+        HeaderValue::from(rate_limit_info.reset),
+    );
+
+    response
 }

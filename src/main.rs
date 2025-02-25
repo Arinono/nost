@@ -88,7 +88,7 @@ async fn main() -> Result<(), eyre::Report> {
     };
 
     // Create rate limiter with 60 requests per minute
-    let rate_limiter = Arc::new(RateLimiter::new(60, 60));
+    let rate_limiter = Arc::new(RateLimiter::new(15, 60));
 
     // Start a background task to clean up the rate limiter
     let rate_limiter_clone = rate_limiter.clone();
