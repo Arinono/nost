@@ -20,14 +20,18 @@ pub async fn ddos_protection_middleware(
         .headers()
         .get("X-Forwarded-For")
         .and_then(|h| h.to_str().ok())
-        .unwrap_or("unknown")
-        .split(',')
-        .next()
-        .unwrap_or("unknown")
-        .trim();
+        .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            // If X-Forwarded-For is not available, try to get the direct connection info
+            req.extensions()
+                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                .map(|connect_info| connect_info.0.ip().to_string())
+        })
+        .unwrap_or_else(|| "127.0.0.1".to_string()); // Default to localhost if no IP is available
 
     // Parse IP address
-    let ip = match IpAddr::from_str(ip_str) {
+    let ip = match IpAddr::from_str(&ip_str) {
         Ok(ip) => ip,
         Err(_) => {
             // Invalid IP - this is suspicious
@@ -130,16 +134,14 @@ fn is_whitelisted(ip: &IpAddr) -> bool {
         // Example: whitelist localhost and your own network
         IpAddr::V4(v4) => {
             // Localhost
-            v4.octets()[0] == 127 ||
+            v4.is_loopback() ||
             // Your office/data center IPs
-            (v4.octets()[0] == 10) ||  // 10.0.0.0/8
-            (v4.octets()[0] == 172 && v4.octets()[1] >= 16 && v4.octets()[1] <= 31)
+            (v4.octets()[0] == 10 && v4.octets()[1] == 4) // 10.4.0.0/16
+
+            // (v4.octets()[0] == 172 && v4.octets()[1] >= 16 && v4.octets()[1] <= 31)
             // 172.16.0.0/12
         }
-        IpAddr::V6(_) => {
-            // Implement IPv6 whitelist logic if needed
-            false
-        }
+        IpAddr::V6(v6) => v6.is_loopback(),
     }
 }
 

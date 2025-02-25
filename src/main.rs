@@ -198,10 +198,13 @@ async fn main() -> Result<(), eyre::Report> {
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let server = tokio::spawn(async move {
-        axum::serve(listener, app.into_make_service())
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .map_err(|e| eyre::eyre!("Server error: {:#}", e))
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| eyre::eyre!("Server error: {:#}", e))
     });
 
     tokio::try_join!(
