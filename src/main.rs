@@ -1,5 +1,6 @@
 mod api;
 mod database;
+mod ddos;
 mod discord;
 mod env;
 mod middleware;
@@ -8,6 +9,7 @@ mod tools;
 mod twitch;
 
 use database::Database;
+use ddos::middleware::DdosProtectionState;
 use env::Environment;
 use eyre::Context;
 use middleware::{auth_middleware, rate_limit_middleware, RateLimiter};
@@ -100,6 +102,10 @@ async fn main() -> Result<(), eyre::Report> {
         }
     });
 
+    // Initialize DDoS protection
+    let ddos_protection = DdosProtectionState::new();
+    let ddos_task = ddos_protection.start_background_tasks();
+
     let cors = CorsLayer::new()
         // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_origin("*".parse::<HeaderValue>().unwrap())
@@ -141,6 +147,11 @@ async fn main() -> Result<(), eyre::Report> {
         .route("/user/latest_subscriber", get(api::latest_subscriber))
         .route("/user/latest_subgift", get(api::latest_subgift))
         .route("/user/latest_bits", get(api::latest_bits))
+        // Apply our middleware chain: DDoS protection → Authentication → Rate limiting
+        .layer(axum_middleware::from_fn_with_state(
+            ddos_protection.clone(),
+            ddos::ddos_protection_middleware,
+        ))
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware,
@@ -163,6 +174,11 @@ async fn main() -> Result<(), eyre::Report> {
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))
+        // Apply DoS protection to all routes
+        .layer(axum_middleware::from_fn_with_state(
+            ddos_protection,
+            ddos::ddos_protection_middleware,
+        ))
         .layer(cors)
         .layer(error_handler)
         .layer(tower_extensions)
@@ -197,6 +213,12 @@ async fn main() -> Result<(), eyre::Report> {
             token.clone()
         ))),
         flatten(retainer_cleanup),
+        flatten(tokio::spawn(async move {
+            if let Err(e) = ddos_task.await {
+                tracing::error!("DDoS protection task error: {:?}", e);
+            }
+            Ok::<(), eyre::Report>(())
+        })),
     )?;
 
     Ok(())
