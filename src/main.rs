@@ -1,4 +1,4 @@
-mod api;
+//mod api;
 mod database;
 mod discord;
 mod env;
@@ -123,10 +123,10 @@ async fn main() -> Result<(), eyre::Report> {
         // eventsub
         .route("/twitch/eventsub", post(twitch::eventsub::eventsub))
         // api
-        .route("/api/user/latest_follow", get(api::latest_follow))
-        .route("/api/user/latest_subscriber", get(api::latest_subscriber))
-        .route("/api/user/latest_subgift", get(api::latest_subgift))
-        .route("/api/user/latest_bits", get(api::latest_bits))
+        // .route("/api/user/latest_follow", get(api::latest_follow))
+        // .route("/api/user/latest_subscriber", get(api::latest_subscriber))
+        // .route("/api/user/latest_subgift", get(api::latest_subgift))
+        // .route("/api/user/latest_bits", get(api::latest_bits))
         //misc
         .route("/health", get(health))
         .route("/*catchall", get(not_found))
