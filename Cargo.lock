@@ -3875,13 +3875,3 @@ dependencies = [
  "quote",
  "syn 2.0.87",
 ]
-
-[[patch.unused]]
-name = "twitch_oauth2"
-version = "0.13.0"
-source = "git+https://github.com/twitch-rs/twitch_api#2f34c5408e0ce9778550b82835d148aa1eec456a"
-
-[[patch.unused]]
-name = "twitch_types"
-version = "0.4.5"
-source = "git+https://github.com/twitch-rs/twitch_api#2f34c5408e0ce9778550b82835d148aa1eec456a"

@@ -4,7 +4,15 @@ use tables::latests::Latests;
 
 use crate::AppState;
 
-pub async fn latest_follow(State(state): State<AppState>) -> impl IntoResponse {
+pub fn routes() -> axum::Router<AppState> {
+    axum::Router::new()
+        .route("/latest/follower", axum::routing::get(latest_follow))
+        .route("/latest/subscriber", axum::routing::get(latest_subscriber))
+        .route("/latest/subgift", axum::routing::get(latest_subgift))
+        .route("/latest/bits", axum::routing::get(latest_bits))
+}
+
+async fn latest_follow(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.database.clone();
     let conn = db.conn().unwrap();
 
@@ -18,7 +26,7 @@ pub async fn latest_follow(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-pub async fn latest_subscriber(State(state): State<AppState>) -> impl IntoResponse {
+async fn latest_subscriber(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.database.clone();
     let conn = db.conn().unwrap();
 
@@ -32,7 +40,7 @@ pub async fn latest_subscriber(State(state): State<AppState>) -> impl IntoRespon
     }
 }
 
-pub async fn latest_subgift(State(state): State<AppState>) -> impl IntoResponse {
+async fn latest_subgift(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.database.clone();
     let conn = db.conn().unwrap();
 
@@ -46,7 +54,7 @@ pub async fn latest_subgift(State(state): State<AppState>) -> impl IntoResponse 
     }
 }
 
-pub async fn latest_bits(State(state): State<AppState>) -> impl IntoResponse {
+async fn latest_bits(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.database.clone();
     let conn = db.conn().unwrap();
 
